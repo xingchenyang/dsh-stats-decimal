@@ -1,0 +1,6 @@
+# dsh-stats-decimal bundle patch: register the plugin as a Loader entry.
+# The same YAML also works as a user-layer insert in the web profile's own
+# cordis.patch.yml (choose ONE route, not both).
+- insert:
+    - id: stats-decimal
+      name: 'dsh-stats-decimal'
