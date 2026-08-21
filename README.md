@@ -27,8 +27,8 @@ DSH（DeepSeek Harness）web 会话统计条的增强插件。它做两件事：
 在新加的一行里，按 CNY / USD 显示会话**累计消费、今日消费、充值余额**：
 
 ```
-CNY 累计 ¥7.67 · 今日 ¥7.67 · 余额 ¥31.84 | USD 累计 $1.08 · 今日 $1.08 · 余额 $0.00
-CNY Total ¥7.67 · Today ¥7.67 · Balance ¥31.84 | USD Total $1.08 · Today $1.08 · Balance $0.00
+CNY 累计 ¥3.55 · 今日 ¥0.95 · 余额 ¥27.21| USD 累计 $0.50 · 今日 $0.13 · 余额 $0.00
+CNY Total ¥3.55 · Today ¥0.95 · Balance ¥27.21 | USD Total $0.50 · Today $0.13 · Balance $0.00
 ```
 
 （上：中文界面；下：英文界面。）
