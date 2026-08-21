@@ -1,0 +1,26 @@
+{
+  "name": "dsh-stats-decimal",
+  "version": "0.1.0",
+  "description": "DSH web client plugin: shadows the built-in conversation stats line with a decimal cache-hit percentage (e.g. 99.7% instead of 99%).",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": []
+    }
+  },
+  "license": "MIT"
+}
