@@ -2,3 +2,7 @@ node_modules/
 *.log
 .DS_Store
 .tools/
+
+# 本地分析与升级调查产物(下载并解包的 rc2 npm 源码、npm 临时缓存)
+.upgrade-investigation/
+.npmcache/

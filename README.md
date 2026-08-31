@@ -70,6 +70,21 @@ dsh web                                                   # 第 3 步：重启
 
 > 少跑任何一步都不行：只 `add` 不 `remove` 会因快照未刷新而用旧代码；`add` 前也需 `Set-ExecutionPolicy`（`dsh plugin` 内部走 pnpm/npm 脚本）。若 profile 的 `cordis.patch.yml` 里已写了 `stats-decimal` 条目，`remove` 不会删它，重装后仍命中，无需改。
 
+### 一步脚本（推荐）
+
+`scripts/reload-plugin.mjs` 把 remove+add 合并成一条命令，且直接以 `node` 调用 dsh 的 `bin.js`，**绕开 PowerShell 执行策略**（无需 `Set-ExecutionPolicy`），行为与 `dsh plugin` 完全一致（含 bundle 自注册），并在失败时给出更明确的提示：
+
+```powershell
+cd C:\PROJETS-PERSO\dsh-stats-decimal          # 或项目源码根目录
+node scripts/reload-plugin.mjs                 # 默认 profile=web
+node scripts/reload-plugin.mjs --profile web   # 显式指定
+node scripts/reload-plugin.mjs --dry-run       # 只看会执行什么，不改动
+```
+
+脚本只更新 profile 的 `package.json` 依赖与 `node_modules`，**不碰 `cordis.patch.yml`**（插件配置保留）。跑完仍要重启 `dsh web` 并硬刷新（Ctrl+F5）。
+
+> Windows 上 `node` 不是 `.ps1`，不受 `Set-ExecutionPolicy` 拦截；唯一的写权限要求是当前终端能写 `$DSH_HOME\profiles\web`。若在受限/沙箱 shell 里跑报 `EPERM`，换普通终端执行。
+
 ## 卸载
 
 ```powershell
