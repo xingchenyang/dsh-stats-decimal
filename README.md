@@ -2,6 +2,11 @@
 
 DSH（DeepSeek Harness）web 会话统计条的增强插件。它做两件事：**修正内置统计栏的数字精度**（最初的目的），并**追加一行分币种消费/余额账本**。
 
+## 兼容性
+
+- 当前目标版本：**DeepSeek Harness `v0.1.2-rc.1`**。
+- 插件直接使用该版本的 projection、slot 和 RPC 接口，**不保证兼容更早的 DSH 版本**。
+
 ## 一、修正数字精度（插件初衷）
 
 官方内置统计条有两处丢精度：
@@ -103,7 +108,7 @@ dsh plugin --profile web remove dsh-stats-decimal
     enableCost: true                    # 第三行账本总开关
     cnyEnabled: true                    # 显示 CNY
     usdEnabled: true                    # 显示 USD
-    peakHours: [9, 10, 11, 14, 15, 16, 17]  # 北京峰时段；空=全程谷价
+    peakHours: [9, 10, 11, 14, 15, 16, 17]  # 北京工作日峰时段；周末固定谷价；空=全程谷价
     balance:
       enabled: true                     # 显示余额
 ```
@@ -131,7 +136,22 @@ dsh plugin --profile web remove dsh-stats-decimal
 
 ### `peakHours`（北京时间峰谷）
 
-填**北京时间**峰钟点（0-23），例：北京峰 9:00–12:00、14:00–18:00 → `[9,10,11,14,15,16,17]`。按固定 UTC+8 换算，与宿主时区/冬夏令时无关；空则全程谷价。峰谷价默认来自 `lib/pricing.js` 官方价目，可用 `overridePricing` 覆盖。
+填**北京时间工作日**的峰钟点（0-23），例：北京峰 9:00–12:00、14:00–18:00 → `[9,10,11,14,15,16,17]`。按固定 UTC+8 换算，与宿主时区/冬夏令时无关；北京时间周六、周日固定按谷价计算；空数组则始终按谷价计算。峰谷价默认来自 `lib/pricing.js` 官方价目，可用 `overridePricing` 覆盖。
+
+### 支持的模型价格
+
+内置价格表目前覆盖：
+
+- `deepseek-v4-flash`
+- `deepseek-v4-pro`
+- `deepseek-v4-flash-vision-exp`
+
+可通过 `overridePricing` 覆盖已有模型价格或添加其他模型；遇到没有价格配置的模型时显示“费用未知”，不会套用其他模型的价格。
+
+## 注意事项
+
+- “今日”按会话日志中最后一个自然日统计；打开较早的历史会话时，它不一定代表现实中的今天。
+- 费用由本地 token 统计和价格表估算，最终金额以 DeepSeek 官方账单为准。
 
 ## License
 
