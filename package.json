@@ -1,9 +1,9 @@
 {
   "name": "dsh-stats-decimal",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "type": "module",
   "main": "lib/index.js",
-  "description": "DSH plugin: shadows the built-in conversation stats line with a decimal cache-hit percentage, and adds a per-currency (CNY/USD) cost row via a host-side pure projection plus a browser-fetched recharge balance row.",
+  "description": "DSH v0.1.2-rc.1 plugin: shadows the built-in conversation stats line with a decimal cache-hit percentage, and adds a per-currency (CNY/USD) cost row via a host-side pure projection plus a browser-fetched recharge balance row.",
   "exports": {
     ".": {
       "default": "./lib/index.js"
