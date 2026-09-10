@@ -2,6 +2,14 @@
 
 本文件记录面向使用者的功能变化。开发背景与技术决策见 `DEVELOPMENT.md`。
 
+格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
+
+## [Unreleased]
+
+### Changed
+
+- 统一 README、DEVELOPMENT 和 CHANGELOG 的文档结构，补充文档导航、架构状态、验证入口和发布检查。
+
 ## [0.4.0] - 2026-09-07
 
 ### Added

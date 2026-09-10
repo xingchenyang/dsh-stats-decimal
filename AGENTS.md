@@ -4,6 +4,7 @@
 
 ## 范围
 
+- 当前插件版本为 `0.4.0`。
 - 当前唯一保证的 DeepSeek Harness 版本是 `v0.1.2-rc.1`。
 - 不要自行承诺其他 DSH 版本兼容性；必须先验证对应源码 contract。
 - 保持 README 面向使用者且简洁。发布历史写入 `CHANGELOG.md`，技术背景与接手状态写入 `DEVELOPMENT.md`。
@@ -36,6 +37,7 @@ git diff --check
 
 ## 文档
 
+- 所有新增和修改都属于即将提交的版本；提交前核对版本号与日期。
 - 用户可见变化写到 `CHANGELOG.md` 对应的插件版本章节。
 - 架构、限制或关键决策变化时更新 `DEVELOPMENT.md`。
 - 只有安装、配置或当前使用行为变化时才更新 `README.md`。
