@@ -4,6 +4,14 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [Unreleased]
+
+## [0.5.3] - 2026-09-26
+
+### Fixed
+
+- 修复余额不显示：改用 Connection 的共享 `/api` 精确路由，避开 DSH 组合 profile 中 `rpc.handle()` 的 Host 路由注册问题；并在费用行挂载后立即发起首次读取。
+
 ## [0.5.2] - 2026-09-26
 
 ### Changed

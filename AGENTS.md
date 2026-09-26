@@ -4,9 +4,9 @@
 
 ## 范围
 
-- 当前插件版本为 `0.5.2`。
-- 当前唯一保证的 DeepSeek Harness 版本是 `v0.1.7-rc.2`。
-- 不要自行承诺其他 DSH 版本兼容性；必须先验证对应源码 contract。
+- 插件版本以 `package.json` 的 `version` 为唯一事实源，不在本文件重复维护当前版本号。
+- 当前 DeepSeek Harness 适配目标见 `README.md` / `DEVELOPMENT.md`。
+- 不要自行承诺适配目标以外的 DSH 版本兼容性；必须先验证对应源码 contract。
 - 保持 README 面向使用者且简洁。发布历史写入 `CHANGELOG.md`，技术背景与接手状态写入 `DEVELOPMENT.md`。
 
 ## 必须保持
