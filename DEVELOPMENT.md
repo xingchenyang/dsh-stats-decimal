@@ -4,14 +4,14 @@
 
 ## 当前状态
 
-- 当前版本：`0.5.1`。
+- 当前版本：`0.5.2`。
 - 当前适配目标：DeepSeek Harness `v0.1.7-rc.2`。用户确认升级后的 Web 能显示费用数据，且费用行排在原生统计 pills 和上下文圆环之后，作为紧凑、清晰的第二行显示。运行时 DOM 显示上下文圆环是 composer dock 的后续兄弟节点；当前费用项仍注册在 `conversation.composer.dock` 并通过 footer flex order 排在两项原生统计之后，行距为 4px，不加背景装饰。
-- Desktop 由 Electron 加载完整 Web 应用，但拥有独立的 `$DSH_HOME/profiles/desktop`，与 Web profile 的插件包、激活列表和配置相互隔离。`dsh.client.platform: "web"` 适用于嵌入的 Web 界面；Desktop 插件必须通过 Desktop 插件页安装，并在 Desktop profile 单独配置。
+- Desktop 由 Electron 加载完整 Web 应用，但拥有独立的 `$DSH_HOME/profiles/desktop`、插件包管理状态和随应用提供的 pnpm，与 Web profile 相互隔离。`dsh.client.platform: "web"` 适用于嵌入的 Web 界面；Desktop 插件必须通过 Desktop 插件页的原生目录选择器安装，并在 Desktop profile 单独配置。
 - 上游依据：[Desktop v0.1.7-rc.2 架构说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.7-rc.2/apps/desktop/README.md)、[Plugin Manager v0.1.7-rc.2 说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.7-rc.2/packages/boot/plugin-manager/README.md)。
 - 上一验证基线为顶层 `@deepseek-ai/dsh` `0.1.5-rc.1`；其 caret 依赖曾解析为 `0.1.5-rc.2`。当前适配目标不向更早或其他 DSH 版本外推。
 - 技术栈：ESM JavaScript、Cordis Host/Web bundle、`@deepseek-ai/schemastery`、`zod`。
 - 费用 projection 的客户端可见状态版本：`stateVersion: 4`。
-- DSH `v0.1.7-rc.2` 的 Web 端由用户确认费用行工作；余额 RPC、独立 Desktop 安装和配置仍需在对应环境分别验证。升级 DSH 时必须重新验证 projection、slot、locale 和 RPC contract。
+- DSH `v0.1.7-rc.2` 的 Web 端由用户确认费用行工作。Web 与 Desktop 插件页添加本地目录后，两个 profile 都登记为指向同一仓库的 `link:`；当前 Web profile 有 `@deepseek-ai/schemastery` 和 `zod`，Desktop profile 没有。Desktop 因此复现 `ERR_MODULE_NOT_FOUND`（缺少 `@deepseek-ai/schemastery`）；在插件仓库根目录安装已声明的运行时依赖后，Desktop 链接路径可导入，用户确认界面显示正常。命令行 `dsh plugin --profile web add file:...` 已由用户验证；插件页本地目录方式也已验证。插件页 GitHub 仓库地址尚未用本插件端到端验证。公开 `dsh` CLI 不能管理 Desktop profile，Desktop 插件页使用应用提供的 package manager。Desktop 余额 RPC live run 仍未单独验证。升级 DSH 时必须重新验证 projection、slot、locale 和 RPC contract。
 
 ## 架构与数据流
 
@@ -31,6 +31,7 @@
 - `docs/PRICING_HISTORY.md`：历史价格证据、时间精度和公告修订说明。
 - `docs/DEEPSEEK_NEWS_INDEX.md`：官网没有总入口时使用的中英文新闻目录。
 - `cordis.patch.yml`：Cordis bundle 注册入口。
+- `package.json`：声明 Host 插件运行时依赖。Desktop 以本地 `link:` 方式安装时，依赖需要预先安装在链接目标目录中。
 - `scripts/reload-plugin.mjs`：删除并重新安装 `file:` 插件快照。
 - `scripts/check-deepseek-docs.mjs`：从 DeepSeek 英文 canonical 页面源码提取左侧导航目录并与仓库基线比较。
 - `README.md`、`CHANGELOG.md`、`AGENTS.md`：使用说明、版本变化和维护规则。
@@ -73,7 +74,7 @@
 - 费用为本地估算，最终结果以 DeepSeek 官方账单为准。
 - Web 端在 `conversation.composer.dock` 注册 `stats-decimal-billing`。由于 `ContextMeter` 位于 dock slot 外部、但仍是同一 footer 的后续兄弟节点，组件启用时允许 footer 换行，并通过 flex order 将费用排在完整原生统计栏之后作为独立第二行。行间距收紧到 4px，不添加背景装饰。卸载或关闭费用时恢复 footer 原来的 `flex-wrap` 和 `row-gap`。
 - 余额依赖 DSH Host 能读取现有 `DEEPSEEK_API_KEY` 凭据，并依赖 DeepSeek `/user/balance` 的响应格式。
-- 用户提供的运行时 DOM 显示 `ContextMeter` 是 `conversation.composer.dock` slot 的后续兄弟节点，因此仅增加 slot `order` 不能把费用放到它之后。当前客户端将费用排到 ContextMeter 后方作为独立第二行，使用 4px 行距且不加背景，Web 布局已由用户确认。Desktop 若显示为空，先检查插件是否安装在 `profiles/desktop`，并确认该 profile 的 `cordis.patch.yml` 已启用费用和币种；这些开关默认关闭。Desktop live run 与余额 RPC 尚未独立验证。
+- 用户提供的运行时 DOM 显示 `ContextMeter` 是 `conversation.composer.dock` slot 的后续兄弟节点，因此仅增加 slot `order` 不能把费用放到它之后。当前客户端将费用排到 ContextMeter 后方作为独立第二行，使用 4px 行距且不加背景，Web 布局已由用户确认。Desktop 的本地目录管理器只链接仓库而不安装链接包依赖；插件仓库需先运行 `npm install --omit=dev --no-package-lock --ignore-scripts`，完整 Desktop Host 激活待重启验证。安装后还需检查 Desktop profile 的 `cordis.patch.yml` 是否启用了费用和币种；这些开关默认关闭。Desktop live run 与余额 RPC 尚未独立验证。
 
 ## 构建与验证
 

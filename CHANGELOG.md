@@ -4,6 +4,16 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [0.5.2] - 2026-09-26
+
+### Changed
+
+- 区分 CMD/PowerShell Web CLI、插件页 GitHub 地址和本地目录三种安装入口，并标明本插件的验证状态与 profile 边界。
+
+### Fixed
+
+- 补齐 Host 直接导入的运行时依赖，并说明 Desktop 本地 `link:` 安装前需在插件目录安装这些依赖。
+
 ## [0.5.1] - 2026-09-26
 
 ### Changed
