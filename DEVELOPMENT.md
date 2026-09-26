@@ -4,19 +4,21 @@
 
 ## 当前状态
 
-- 当前版本：`0.5.0`。
-- 兼容目标：DeepSeek Harness `v0.1.5-rc.1`。
-- 本机安装验证基线：顶层 `@deepseek-ai/dsh` 为 `0.1.5-rc.1`；其 caret 依赖当前实际解析为 `0.1.5-rc.2`（包括 session projection、token meter、Web UI、DeepSeek LLM adapter 与 JSONL persistence）。兼容声明指这套由 rc.1 安装出的实际依赖树，不外推到其他解析结果。
+- 当前版本：`0.5.1`。
+- 当前适配目标：DeepSeek Harness `v0.1.7-rc.2`。用户确认升级后的 Web 能显示费用数据，且费用行排在原生统计 pills 和上下文圆环之后，作为紧凑、清晰的第二行显示。运行时 DOM 显示上下文圆环是 composer dock 的后续兄弟节点；当前费用项仍注册在 `conversation.composer.dock` 并通过 footer flex order 排在两项原生统计之后，行距为 4px，不加背景装饰。
+- Desktop 由 Electron 加载完整 Web 应用，但拥有独立的 `$DSH_HOME/profiles/desktop`，与 Web profile 的插件包、激活列表和配置相互隔离。`dsh.client.platform: "web"` 适用于嵌入的 Web 界面；Desktop 插件必须通过 Desktop 插件页安装，并在 Desktop profile 单独配置。
+- 上游依据：[Desktop v0.1.7-rc.2 架构说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.7-rc.2/apps/desktop/README.md)、[Plugin Manager v0.1.7-rc.2 说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.7-rc.2/packages/boot/plugin-manager/README.md)。
+- 上一验证基线为顶层 `@deepseek-ai/dsh` `0.1.5-rc.1`；其 caret 依赖曾解析为 `0.1.5-rc.2`。当前适配目标不向更早或其他 DSH 版本外推。
 - 技术栈：ESM JavaScript、Cordis Host/Web bundle、`@deepseek-ai/schemastery`、`zod`。
 - 费用 projection 的客户端可见状态版本：`stateVersion: 4`。
-- 不保证兼容更早或其他 DSH 版本；升级 DSH 时必须重新验证 projection、slot、locale 和 RPC contract。
+- DSH `v0.1.7-rc.2` 的 Web 端由用户确认费用行工作；余额 RPC、独立 Desktop 安装和配置仍需在对应环境分别验证。升级 DSH 时必须重新验证 projection、slot、locale 和 RPC contract。
 
 ## 架构与数据流
 
 1. Host 侧 `billingLedger` 折叠 `assistant/message` 的 usage 事件。
 2. `lib/pricing.js` 先按事件时间选择当时有效的模型价格，再按缓存桶、输出 token 及北京时间工作日峰谷计算费用。
 3. projection 通过 `wire.viewSchema` 将累计消费、当日消费、启用币种和计价状态传给 Web。
-4. Web 客户端保留 DSH 原生 `StatsPills`，用独立 slot 项读取 `billingLedger` 并渲染消费账本和当前计价时段。
+4. Web 客户端保留 DSH 原生 `StatsPills`，在 `conversation.composer.dock` 注册费用项。DSH 0.1.7-rc.2 把 `ContextMeter` 作为 dock 的后续兄弟节点；客户端在费用启用时允许共享 footer 换行，并通过 flex order 将费用项放到两项原生统计之后作为独立第二行。行间距为 4px，费用行不添加背景装饰。
 5. 余额走独立的 loopback RPC `/stats-decimal`；Host 调用 DeepSeek `/user/balance`，浏览器不接触 API Key。
 
 余额不写入 Session。Session 日志拒绝未知事件类型，而 projection 已足以提供会话累计数据；因此不向 Session 追加插件自定义余额事件。
@@ -39,7 +41,7 @@
 
 - 内部 state schema 包含 `cumulative`、`today`、`todayStamp` 和 `pricingKnown`。
 - 客户端 view schema 包含 `enabled`、`currencies`、`peakHours`、`cumulative`、`today` 和 `pricingKnown`，不暴露内部 `todayStamp`。
-- 当前 DSH 版本要求 projection 通过 `wire.viewSchema` 向客户端提供数据；缺少 `wire` 时，`useProjection("billingLedger")` 不会收到可渲染数据。
+- 当前适配目标 DSH `v0.1.7-rc.2` 使用 `wire.viewSchema` 向客户端提供 projection 数据；缺少 `wire` 时，`useProjection("billingLedger")` 不会收到可渲染数据。
 - 修改 projection state 或 wire view shape 时，必须同步更新 schema、view、客户端消费代码和 `stateVersion`。
 - `todayStamp` 用于跨自然日折叠时先清零当日消费，避免历史事件和不同日期混算。
 
@@ -69,9 +71,9 @@
 
 - “今日”按会话日志最后一个自然日累计；打开较早历史会话时，不一定代表现实中的今天。
 - 费用为本地估算，最终结果以 DeepSeek 官方账单为准。
-- Web 端在 `conversation.composer.dock` 注册独立的 `stats-decimal-billing` 项，不覆盖官方 `stats` 项。
+- Web 端在 `conversation.composer.dock` 注册 `stats-decimal-billing`。由于 `ContextMeter` 位于 dock slot 外部、但仍是同一 footer 的后续兄弟节点，组件启用时允许 footer 换行，并通过 flex order 将费用排在完整原生统计栏之后作为独立第二行。行间距收紧到 4px，不添加背景装饰。卸载或关闭费用时恢复 footer 原来的 `flex-wrap` 和 `row-gap`。
 - 余额依赖 DSH Host 能读取现有 `DEEPSEEK_API_KEY` 凭据，并依赖 DeepSeek `/user/balance` 的响应格式。
-- 当前只保证 DSH `v0.1.5-rc.1`；其他版本需要重新验证后才能更新兼容声明。
+- 用户提供的运行时 DOM 显示 `ContextMeter` 是 `conversation.composer.dock` slot 的后续兄弟节点，因此仅增加 slot `order` 不能把费用放到它之后。当前客户端将费用排到 ContextMeter 后方作为独立第二行，使用 4px 行距且不加背景，Web 布局已由用户确认。Desktop 若显示为空，先检查插件是否安装在 `profiles/desktop`，并确认该 profile 的 `cordis.patch.yml` 已启用费用和币种；这些开关默认关闭。Desktop live run 与余额 RPC 尚未独立验证。
 
 ## 构建与验证
 
@@ -100,7 +102,9 @@ node scripts/reload-plugin.mjs --profile web
 dsh web
 ```
 
-随后硬刷新 Web 页面，检查原生 StatsPills、累计/今日费用、未知模型状态、余额展示、官方峰谷状态和布局。
+随后硬刷新 Web 页面，检查原生 StatsPills、独立费用行是否位于完整统计栏下方、累计/今日费用、未知模型状态、余额展示、官方峰谷状态和布局。
+
+Desktop 手动验证必须从 Desktop 插件页安装到其保留的 `desktop` profile，在 `$DSH_HOME/profiles/desktop/cordis.patch.yml` 单独启用费用和币种配置，再重启 Desktop。检查原生 StatsPills 与费用行；余额 RPC 另行验证。不要通过 CLI 或 Web 的 reload 脚本操作保留的 Desktop profile。
 
 ## 后续计划
 
