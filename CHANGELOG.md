@@ -8,11 +8,11 @@
 
 ### Changed
 
-- 区分 CMD/PowerShell Web CLI、插件页 GitHub 地址和本地目录三种安装入口，并标明本插件的验证状态与 profile 边界。
+- 明确按运行环境划分插件管理方式：Web 使用 CMD/PowerShell 命令行；Desktop 使用主应用「插件」页面中的「添加插件」功能。GitHub 安装后需重启 Desktop。
 
 ### Fixed
 
-- 补齐 Host 直接导入的运行时依赖，并说明 Desktop 本地 `link:` 安装前需在插件目录安装这些依赖。
+- 补齐 Host 直接导入的运行时依赖，并记录 Desktop 的依赖处理差异：本地 `link:` 安装前需在源码目录安装依赖，GitHub 安装则由 profile pnpm 按插件清单安装。
 
 ## [0.5.1] - 2026-09-26
 

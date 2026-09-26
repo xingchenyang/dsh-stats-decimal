@@ -53,17 +53,37 @@ PEAK  CNY Total ¥3.55 · Today ¥0.95 · Balance ¥27.21 | USD Total $0.50 · T
 
 每个启用币种只出现一次；多币种用 `|` 分隔，单币种不显示分隔符。费用未知时显示 `费用未知 / Cost unknown`，不影响余额显示。
 
-## 安装
+## 插件管理
 
-支持命令行和插件页两类入口。命令行只用于 Web profile；插件页可以分别管理 Web 或 Desktop profile，并接受包名、GitHub 仓库地址或本地目录。
+按运行环境选择对应的插件管理方式：Web profile 使用 CMD/PowerShell 命令行；Desktop profile 在 Desktop 主应用的「插件」页面管理，添加插件时使用「添加插件」功能。两个 profile 相互独立。
 
-| 方式 | 目标 profile | 本插件安装验证 |
-|---|---|---|
-| CMD / PowerShell：`dsh plugin --profile web ...` | Web | 已验证 |
-| 插件页：GitHub 仓库地址 | 当前打开的 Web 或 Desktop profile | 尚未验证 |
-| 插件页：本地插件目录 | 当前打开的 Web 或 Desktop profile | 已验证；先安装源码目录依赖 |
+| 环境 | 插件管理方式 |
+|---|---|
+| Desktop | 「插件」页面；添加时使用「添加插件」功能 |
+| Web | CMD/PowerShell：`dsh plugin --profile web ...` |
 
-### CMD / PowerShell 命令行安装（仅 Web；已验证）
+### Desktop：使用「添加插件」功能
+
+在 Desktop 主应用侧栏打开「插件」页面，点击「添加插件」，再输入 GitHub 仓库地址：
+
+```text
+https://github.com/xingchenyang/dsh-stats-decimal
+```
+
+安装成功后点击「立即启用」，再重启 DSH Desktop，插件才会应用。GitHub 安装会由 Desktop profile 的 pnpm 安装插件声明的依赖，无需预先在本地源码目录安装依赖。未指定 Git ref 时，pnpm 使用默认分支的最新提交，并将解析到的 commit 写入 profile lockfile；GitHub Release 不参与选择。
+
+需要安装本地源码时，也可在同一「添加插件」功能中选择本地插件目录。此方式登记为 `link:`，不会替源码目录安装依赖；在仓库根目录先运行以下命令，再在「添加插件」表单中选择仓库根目录。该命令只准备源码依赖，不会向 DSH 安装插件：
+
+```powershell
+Set-Location C:\PROJETS-PERSO\dsh-stats-decimal
+npm.cmd install --omit=dev --no-package-lock --ignore-scripts
+```
+
+本地目录安装和配置都属于 Desktop profile。不要用 Web 命令行或 Web 重装脚本管理 Desktop profile。
+
+### Web：CMD / PowerShell 命令行
+
+此处的 `dsh` 命令只管理 Web profile；Desktop profile 在 Desktop 应用的「插件」页面管理。
 
 `dsh plugin` 内部调用 pnpm；pnpm 必须在 PATH 中。若尚未安装 pnpm，在 CMD 中运行：
 
@@ -93,45 +113,11 @@ dsh plugin --profile web add file:./dsh-stats-decimal
 dsh web
 ```
 
-`file:./dsh-stats-decimal` 从当前 shell 目录解析，不从 profile 目录解析。`add` 会把插件写入 profile 并自动加入 `dsh.profile.bundles`，无需手动 insert。此命令管理 Web profile；官方 Desktop profile 由 Desktop 应用独占，不能用公共 `dsh` CLI 管理，参见 [Desktop 说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.7-rc.2/apps/desktop/README.md)。
-
-CLI 的 `file:` 安装与插件页的「本地目录」不同：前者由 profile 包管理器安装本地包及其依赖；后者登记为 `link:`，不会替链接目标安装依赖。
-
-### 通过插件页安装 GitHub 仓库地址（尚未验证）
-
-在目标应用的「插件」页打开添加插件流程，输入 GitHub 仓库地址，例如 `https://github.com/<owner>/<repository>`。DSH 会在当前 profile 中通过 pnpm 安装仓库包；仓库 `package.json` 中声明的运行时依赖也会随之安装。安装前请确认所选分支或标签已包含本插件所需的依赖声明。此方式尚未用本插件完成端到端验证；Git 仓库若带有 `prepare` 构建脚本，pnpm 可能要求先在 profile 中批准该脚本。
-
-### 通过插件页安装本地目录（已验证）
-
-插件页将本地目录登记为 `link:`；profile 安装器不会替链接目标安装 `package.json` 中的依赖。Web 与 Desktop profile 相互独立，不能依赖 Web profile 中碰巧已有的包。通过任一插件页添加本地目录前，在仓库根目录安装依赖。
-
-CMD：
-
-```cmd
-cd /d C:\PROJETS-PERSO\dsh-stats-decimal
-npm.cmd install --omit=dev --no-package-lock --ignore-scripts
-```
-
-PowerShell：
-
-```powershell
-Set-Location C:\PROJETS-PERSO\dsh-stats-decimal
-npm.cmd install --omit=dev --no-package-lock --ignore-scripts
-```
-
-把依赖安装在链接目标中，可避免依赖恰好只存在某个 profile 的情况。
-
-#### Web
-
-在 Web 的「插件」页打开添加插件流程，选择「本地目录」，再选择本仓库根目录（其中包含 `package.json` 和 `cordis.patch.yml`）。此方式管理 Web profile；配置路径为 `$DSH_HOME\profiles\web\cordis.patch.yml`。
-
-#### DeepSeek Harness Desktop
-
-在 Desktop 自带的「插件」页打开添加插件流程，通过原生目录选择器选中本仓库根目录。Desktop 使用随应用提供的 pnpm，并独占 `$DSH_HOME\profiles\desktop`；安装、激活列表和配置都与 Web profile 分开。若 Desktop 已经链接到该目录，完成上一步后直接重启 Desktop；首次安装则在准备依赖后从 Desktop 插件页添加目录。安装后在 Desktop profile 配置并重启 Desktop。请勿用 `dsh plugin --profile desktop` 或本仓库的 Web 重装脚本操作 Desktop profile。
+`file:./dsh-stats-decimal` 从当前 shell 目录解析，不从 profile 目录解析。`add` 会把插件写入 profile 并自动加入 `dsh.profile.bundles`，无需手动 insert。此命令管理 Web profile；官方 Desktop profile 由 Desktop 应用独占，不能用公共 `dsh` CLI 管理，参见 [Desktop 中文说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.7-rc.2/apps/desktop/README.zh.md)。
 
 ## 更新与卸载
 
-使用 CLI 的 `file:` 方式安装后，修改源码时应重新安装并重启 DSH，让 profile 和 Host 重新加载插件：
+Web 通过 CLI 的 `file:` 方式安装后，修改源码时应重新安装并重启 DSH，让 Web profile 和 Host 重新加载插件：
 
 ```powershell
 cd <插件源码目录的上一级>
@@ -159,11 +145,11 @@ dsh plugin --profile web remove dsh-stats-decimal
 
 如果 profile 的 `cordis.patch.yml` 仍有 `stats-decimal` 条目，建议一并删除；遗留条目不会影响重新安装。
 
-通过插件页安装的本地目录，在对应应用的「插件」页移除旧条目，再重新选择本仓库根目录安装，以刷新已安装的包和依赖。Desktop 操作只在 Desktop 插件页完成，并在重装后重启 Desktop；Web CLI 和重装脚本只用于 Web profile。
+Desktop 插件通过 Desktop 的「插件」页面管理；添加或重装时使用「添加插件」功能，完成后重启 Desktop。Web 通过命令行和重装脚本管理。两种方式操作各自独立的 profile。
 
 ## 配置
 
-编辑 `$DSH_HOME\profiles\web\cordis.patch.yml`；文件不存在时新建，顶层必须是 YAML 数组。Desktop 则编辑 `$DSH_HOME\profiles\desktop\cordis.patch.yml`，使用相同配置：
+Desktop 使用 `$DSH_HOME\profiles\desktop\cordis.patch.yml`；文件不存在时新建，顶层必须是 YAML 数组。通过 Web 命令行管理时，编辑独立的 `$DSH_HOME\profiles\web\cordis.patch.yml`。两个 profile 使用相同配置项：
 
 ```yaml
 - id: stats-decimal
@@ -178,7 +164,7 @@ dsh plugin --profile web remove dsh-stats-decimal
       # apiBase: 'https://api.deepseek.com'
 ```
 
-改完后重启 `dsh web` 并硬刷新（Ctrl+F5）。Desktop 改完后重启 Desktop。仅安装插件不会显示费用行，因为 `enableCost`、`cnyEnabled` 和 `usdEnabled` 默认都是 `false`；Web 与 Desktop 的配置互不继承。所有开关默认关闭：
+改完后，Desktop 重启 Desktop；Web 重启 `dsh web` 并硬刷新（Ctrl+F5）。仅安装插件不会显示费用行，因为 `enableCost`、`cnyEnabled` 和 `usdEnabled` 默认都是 `false`；两个 profile 的配置互不继承。所有开关默认关闭：
 
 | 配置 | 默认值 | 作用 |
 |---|---:|---|
