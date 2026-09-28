@@ -19,7 +19,7 @@
 2. `lib/pricing.js` 先按事件时间选择当时有效的模型价格，再按缓存桶、输出 token 及北京时间工作日峰谷计算费用。
 3. projection 通过 `wire.viewSchema` 将累计消费、当日消费、启用币种和计价状态传给 Web。
 4. Web 客户端保留 DSH 原生 `StatsPills`，在 `conversation.composer.dock` 注册费用项。DSH 0.1.7-rc.2 把 `ContextMeter` 作为 dock 的后续兄弟节点；客户端在费用启用时允许共享 footer 换行，并通过 flex order 将费用项放到两项原生统计之后作为独立第二行。行间距为 4px，费用行不添加背景装饰。
-5. 余额走 DSH Connection 的共享 `/api` 精确路由；Host 调用 DeepSeek `/user/balance`，浏览器不接触 API Key。
+5. 余额走 DSH Connection 的共享 `/api` 精确路由。Host 优先使用 DSH 凭据中的 `DEEPSEEK_API_KEY` 调用 DeepSeek `/user/balance`；未配置 API Key 时，按需读取可选的 `deepseekAccount` Host 服务并调用 `getBalance(AccountClientMetadata)`。账户 token、Platform 请求头均由 DSH provider 持有和处理，浏览器不接触凭据。
 
 余额不写入 Session。Session 日志拒绝未知事件类型，而 projection 已足以提供会话累计数据；因此不向 Session 追加插件自定义余额事件。
 
@@ -66,13 +66,15 @@
 - API Key 只在 Host 侧解析和使用，按 `.credentials.yaml`、credentials service、进程环境的顺序读取。
 - API Key 不得进入 client bundle、projection、Session 日志、URL 或普通错误输出。
 - 余额通过 Host 注册的 `/api/stats-decimal/getBalance` 精确路由提供，客户端只收到余额数值、可用状态和安全错误标记。
-- 余额失败、没有 Key 或没有对应币种余额时返回空值；余额读取独立于模型费用计价。
+- 配置了 `DEEPSEEK_API_KEY` 时，余额使用 API Key 路径；只有未配置 Key 时才查询可选的 `deepseekAccount` 服务。服务通过 `ctx.get()` 按请求查找，不把账号服务设成插件的必需依赖。
+- `deepseekAccount.getBalance()` 的调用元数据仅包含 DSH 客户端版本、请求语言和时区偏移；余额映射仅读取充值钱包的 `value`，赠送钱包不并入余额。
+- 余额失败、没有 API Key 且没有已登录账号，或没有对应币种余额时返回空值；余额读取独立于模型费用计价。
 
 ## 已知限制
 
 - “今日”按会话日志最后一个自然日累计；打开较早历史会话时，不一定代表现实中的今天。
 - 费用为本地估算，最终结果以 DeepSeek 官方账单为准。
-- 余额依赖 DSH Host 能读取现有 `DEEPSEEK_API_KEY` 凭据，并依赖 DeepSeek `/user/balance` 的响应格式。
+- 余额依赖以下任一 Host 能力：`DEEPSEEK_API_KEY` 凭据及 DeepSeek `/user/balance` 响应格式，或 DSH `deepseekAccount.getBalance()` 服务及其 Platform 钱包结构。API Key 路径优先；未配置 API Key 才使用账户登录路径。
 - Desktop 本地目录安装只链接仓库，不安装链接包依赖；使用该开发路径前，需在插件仓库根目录运行 `npm install --omit=dev --no-package-lock --ignore-scripts`。Desktop GitHub 安装由 profile pnpm 安装声明的依赖，安装后需重启 Desktop。安装后还需检查 Desktop profile 的 `cordis.patch.yml` 是否启用了费用和币种；这些开关默认关闭。
 
 ## 构建与验证

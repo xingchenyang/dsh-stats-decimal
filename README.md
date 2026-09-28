@@ -217,10 +217,12 @@ overridePricing:
 
 ### 余额
 
-- 不需要配置 `apiKey`；Host 按 DSH 的凭据优先级复用 `DEEPSEEK_API_KEY`（包括 `$DSH_HOME\.credentials.yaml`）。
+- Host 优先复用 DSH 的 `DEEPSEEK_API_KEY`（包括 `$DSH_HOME\.credentials.yaml`），通过 DeepSeek API 查询余额。
+- 未配置 API Key 时，如果 DSH 提供 `deepseekAccount` 服务，则通过其登录态读取账户充值余额；不需要把账户 token 或 `apiKey` 配进本插件。
+- API Key 与账户登录同时可用时，API Key 路径优先。账户登录路径读取充值钱包，不包含赠送钱包。
 - API Key 只在 Host 侧解析和使用，不进入浏览器、projection 或 Session 日志。
 - 页面加载时读取一次，之后每 5 分钟轮询；刷新页面即可手动刷新。
-- Key 为空、请求降级或该币种没有余额时显示 `余额 – / Balance –`。
+- 没有可用凭据、请求失败或该币种没有充值余额时显示 `余额 – / Balance –`。
 
 ## 注意事项
 

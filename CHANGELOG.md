@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-09-28
+
+### Added
+
+- 支持在没有 `DEEPSEEK_API_KEY` 时，通过 DSH `deepseekAccount` Host 服务读取账户登录模式的充值余额；保留 API Key 路径优先级，不读取或传递账户 token。
+
 ## [0.5.3] - 2026-09-26
 
 ### Fixed
