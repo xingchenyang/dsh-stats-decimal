@@ -3,7 +3,7 @@
   "version": "0.5.4",
   "type": "module",
   "main": "lib/index.js",
-  "description": "DSH v0.1.7-rc.2 plugin: preserves native StatsPills and adds CNY/USD cost, recharge balance, and Beijing-time pricing-period status.",
+  "description": "DSH v0.2.0-rc.1 plugin: preserves native StatsPills and adds CNY/USD cost, recharge balance, and Beijing-time pricing-period status.",
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.4",
     "zod": "^4.4.3"
