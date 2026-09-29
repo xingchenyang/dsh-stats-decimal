@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PRICE_HISTORY, PRICE_NOTICES, PRICES, bandForTime, costOf, mergePricing, pricingAt } from "../lib/pricing.js";
+import { holidaySpansForClient, isStatutoryPublicHoliday } from "../lib/billing-calendar/index.js";
 
 const FLASH_IDS = [
 	"deepseek-flash",
@@ -85,12 +86,55 @@ test("costOf uses historical prices when an event timestamp is supplied", () => 
 	});
 });
 
-test("Beijing weekday peak hours and weekend off-peak are stable across host time zones", () => {
+test("Beijing weekday peak hours, weekends, and makeup weekends classify correctly", () => {
 	const peakHours = [9, 10, 11, 14, 15, 16, 17];
 	assert.equal(bandForTime(Date.UTC(2026, 8, 14, 1, 0), peakHours), "peak");
 	assert.equal(bandForTime(Date.UTC(2026, 8, 14, 4, 0), peakHours), "valley");
 	assert.equal(bandForTime(Date.UTC(2026, 8, 12, 2, 0), peakHours), "valley");
+	assert.equal(bandForTime(Date.UTC(2026, 8, 13, 1, 0), peakHours), "valley");
+	assert.equal(bandForTime(Date.UTC(2026, 8, 20, 1, 0), peakHours), "valley");
+	assert.equal(bandForTime(Date.UTC(2026, 9, 10, 1, 0), peakHours), "valley");
 	assert.equal(bandForTime(Date.UTC(2026, 8, 14, 1, 0), []), "valley");
+});
+
+test("bundled 2026 statutory holidays are off-peak for historical pricing", () => {
+	const peakHours = [9, 10, 11, 14, 15, 16, 17];
+	const sep25AtPeak = Date.UTC(2026, 8, 25, 1, 0);
+	const oct1AtPeak = Date.UTC(2026, 9, 1, 1, 0);
+	assert.equal(bandForTime(sep25AtPeak, peakHours), "valley");
+	assert.equal(bandForTime(oct1AtPeak, peakHours), "valley");
+	for (const { endDate } of holidaySpansForClient()) {
+		assert.equal(bandForTime(Date.parse(`${endDate}T01:00:00Z`), peakHours), "valley", `${endDate} remains a holiday`);
+	}
+	assert.equal(bandForTime(Date.UTC(2026, 8, 28, 1, 0), peakHours), "peak");
+	assert.equal(bandForTime(Date.UTC(2026, 9, 8, 1, 0), peakHours), "peak");
+
+	const usage = { uncachedInputTokens: 1_000_000 };
+	const historicalBand = bandForTime(sep25AtPeak, peakHours);
+	assert.deepEqual(costOf(usage, "deepseek-flash", historicalBand, ["CNY"], PRICES, sep25AtPeak), { CNY: 1 });
+});
+
+test("Beijing holiday lookup uses UTC epoch boundaries and falls back outside bundled years", () => {
+	const peakHours = [9, 10, 11, 14, 15, 16, 17];
+	assert.equal(bandForTime(Date.UTC(2026, 8, 24, 1, 0), peakHours), "peak");
+	assert.equal(isStatutoryPublicHoliday(Date.UTC(2026, 8, 24, 15, 59, 59)), false);
+	assert.equal(isStatutoryPublicHoliday(Date.UTC(2026, 8, 24, 16, 0, 0)), true);
+	assert.equal(bandForTime(Date.UTC(2027, 0, 4, 1, 0), peakHours), "peak");
+	assert.equal(bandForTime(Date.UTC(2027, 0, 2, 1, 0), peakHours), "valley");
+});
+
+test("browser calendar payload contains the seven complete official 2026 holiday spans", () => {
+	assert.deepEqual(holidaySpansForClient(), [
+		{ startDate: "2026-01-01", endDate: "2026-01-03" },
+		{ startDate: "2026-02-15", endDate: "2026-02-23" },
+		{ startDate: "2026-04-04", endDate: "2026-04-06" },
+		{ startDate: "2026-05-01", endDate: "2026-05-05" },
+		{ startDate: "2026-06-19", endDate: "2026-06-21" },
+		{ startDate: "2026-09-25", endDate: "2026-09-27" },
+		{ startDate: "2026-10-01", endDate: "2026-10-07" }
+	]);
+	assert.equal(holidaySpansForClient().some(({ startDate, endDate }) => startDate <= "2026-09-20" && "2026-09-20" <= endDate), false);
+	assert.equal(holidaySpansForClient().some(({ startDate, endDate }) => startDate <= "2026-10-10" && "2026-10-10" <= endDate), false);
 });
 
 test("costOf uses cache hit, cache miss, and output buckets for both currencies", () => {

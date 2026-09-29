@@ -4,6 +4,21 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [0.6.0] - 2026-09-29
+
+### Added
+
+- 将 2026 年中国法定节假日纳入峰谷计价；工作日法定节假日全天按谷价，周末调休上班日仍按周末谷价。
+- 增加集中维护的年度计费日历和来源记录；未内置年份继续按工作日峰时配置及周末规则回退。
+
+### Changed
+
+- 费用 projection 状态版本更新为 `5`，使已有会话按新的历史节假日分类重新折叠，并向浏览器提供必要的假期日期范围。
+
+### Fixed
+
+- 余额 API Key 改由 DSH credentials service 解析，移除对私有凭据文件格式的直接读取；无效的非数值余额字符串不再被部分解析。
+
 ## [0.5.4] - 2026-09-28
 
 ### Added

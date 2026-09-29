@@ -11,9 +11,9 @@
 - 保留 DSH 原生 `StatsPills` 的轮次、速度、精确 token 和缓存命中详情。
 - 独立显示消费/余额账本，不覆盖 DSH 原生 `stats` 项。
 - 支持 CNY/USD 累计消费、最后一个会话自然日的消费和充值余额。
-- 按事件发生时的历史价格、模型、缓存命中/未命中、输出 token 及北京时间工作日峰谷时段估算费用。
+- 按事件发生时的历史价格、模型、缓存命中/未命中、输出 token 及北京时间峰谷时段估算费用。
 - 显示当前官方计价时段：`空闲时段 / 高峰时段`、`OFF-PEAK / PEAK`。
-- 周六、周日固定按空闲时段；支持为已有或自定义模型覆盖完整价格表。
+- 周六、周日（包括调休上班的周末）和已编入日历的中国法定节假日固定按空闲时段；支持为已有或自定义模型覆盖完整价格表。
 - 未配置价格的模型显示 `费用未知 / Cost unknown`，不套用其他模型价格。
 - 费用和余额功能由配置开关控制，默认关闭。
 
@@ -22,6 +22,7 @@
 - [CHANGELOG.md](CHANGELOG.md)：版本与用户可见变化。
 - [DEVELOPMENT.md](DEVELOPMENT.md)：架构、兼容性约束、测试与发布流程。
 - [docs/PRICING_HISTORY.md](docs/PRICING_HISTORY.md)：历史价格、公告状态与官方来源。
+- [docs/BILLING_CALENDAR.md](docs/BILLING_CALENDAR.md)：法定节假日计价规则、年度日历来源与维护方式。
 - [docs/DEEPSEEK_NEWS_INDEX.md](docs/DEEPSEEK_NEWS_INDEX.md)：从官网侧栏整理的中英文新闻入口。
 - [AGENTS.md](AGENTS.md)：自动化 Agent 和维护者必须遵守的仓库规则。
 
@@ -182,7 +183,7 @@ Desktop 使用 `$DSH_HOME\profiles\desktop\cordis.patch.yml`；文件不存在�
 
 ### `peakHours`
 
-填北京时间工作日的峰钟点（0–23）。例如北京峰时段为 9:00–12:00、14:00–18:00，则填写 `[9,10,11,14,15,16,17]`。计算使用固定 UTC+8，与宿主时区和冬夏令时无关；北京时间周六、周日始终按谷价。空数组表示全程谷价。
+填北京时间工作日的峰钟点（0–23）。例如北京峰时段为 9:00–12:00、14:00–18:00，则填写 `[9,10,11,14,15,16,17]`。计算使用固定 UTC+8，与宿主时区和冬夏令时无关；周六、周日（包括调休上班日）及已编入日历的中国法定节假日全天按谷价。当前内置 2026 年法定节假日；未内置年份继续按周末和 `peakHours` 判断工作日，不推测节假日。空数组表示全程谷价。
 
 ### 价格与模型
 
@@ -221,7 +222,7 @@ overridePricing:
 
 ### 余额
 
-- Host 优先复用 DSH 的 `DEEPSEEK_API_KEY`（包括 `$DSH_HOME\.credentials.yaml`），通过 DeepSeek API 查询余额。
+- Host 通过 DSH credentials service 解析 `DEEPSEEK_API_KEY`，再调用 DeepSeek API 查询余额；凭据存储格式由 DSH 管理，本插件不直接读取凭据文件。
 - 未配置 API Key 时，如果 DSH 提供 `deepseekAccount` 服务，则通过其登录态读取账户充值余额；不需要把账户 token 或 `apiKey` 配进本插件。
 - API Key 与账户登录同时可用时，API Key 路径优先。账户登录路径读取充值钱包，不包含赠送钱包。
 - API Key 只在 Host 侧解析和使用，不进入浏览器、projection 或 Session 日志。

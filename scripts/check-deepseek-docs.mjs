@@ -14,7 +14,7 @@ async function fetchSource(url) {
 	const timer = setTimeout(() => controller.abort(), 20_000);
 	try {
 		const response = await fetch(url, {
-			headers: { "user-agent": "dsh-stats-decimal-upstream-check/0.5.0" },
+			headers: { "user-agent": "dsh-stats-decimal-upstream-check" },
 			signal: controller.signal
 		});
 		if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
@@ -84,12 +84,22 @@ async function currentSnapshot() {
 	// reliably, while internal routes are canonicalized so the saved zh-CN
 	// references can be derived without fetching the same navigation twice.
 	const enRoot = await fetchSource(ROOTS.en);
-	// The home pages expose the current News entry, while the complete News
-	// sidebar is rendered in that article's source. Follow the discovered entry
-	// instead of hard-coding the newest slug.
+	// The home page exposes the current News entry. The docs and News navigation
+	// now have separate sidebars, so read the API docs tree from the pricing page
+	// and the News category from its newest article, then compare their union.
 	const enNewsPath = firstNewsPath(enRoot);
+	const enPricingSource = await fetchSource(new URL("/quick_start/pricing/", ROOTS.en));
 	const enNewsSource = await fetchSource(localizedNewsUrl(enNewsPath, "en"));
-	const sidebar = sidebarFromSource(enNewsSource);
+	const docsSidebar = sidebarFromSource(enPricingSource);
+	const newsSidebar = sidebarFromSource(enNewsSource);
+	const sidebar = [];
+	const seenSidebarEntries = new Set();
+	for (const item of [...docsSidebar, ...newsSidebar]) {
+		const key = `${item.href}\u0000${item.title}`;
+		if (seenSidebarEntries.has(key)) continue;
+		seenSidebarEntries.add(key);
+		sidebar.push(item);
+	}
 	return {
 		checkedAt: new Date().toISOString(),
 		roots: ROOTS,
@@ -98,7 +108,7 @@ async function currentSnapshot() {
 			zhCN: localizedNewsUrl(enNewsPath, "zhCN"),
 			en: localizedNewsUrl(enNewsPath, "en")
 		},
-		news: newsFromSidebar(sidebar),
+		news: newsFromSidebar(newsSidebar),
 		sidebar
 	};
 }
