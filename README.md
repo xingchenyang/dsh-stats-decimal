@@ -47,10 +47,9 @@ DSH 原生统计保持不变；插件在输入框下方的统计带中追加独�
 
 费用账本示例：
 
-```text
-国庆节 · 空闲时段  CNY 累计 ¥3.55 · 今日 ¥0.95 · 余额 ¥27.21 | USD 累计 $0.50 · 今日 $0.13 · 余额 $0.00
-National Day · OFF-PEAK  CNY Total ¥3.55 · Today ¥0.95 · Balance ¥27.21 | USD Total $0.50 · Today $0.13 · Balance $0.00
-```
+**国庆节 · 空闲时段** CNY 累计 ¥0.67 · 今日 ¥0.67 · 余额 ¥9.20 | USD 累计 $0.10 · 今日 $0.10 · 余额 $0.00
+
+**National Day · OFF-PEAK** CNY Total ¥0.67 · Today ¥0.67 · Balance ¥9.20 | USD Total $0.10 · Today $0.10 · Balance $0.00
 
 每个启用币种只出现一次；多币种用 `|` 分隔，单币种不显示分隔符。费用未知时显示 `费用未知 / Cost unknown`，不影响余额显示。
 
