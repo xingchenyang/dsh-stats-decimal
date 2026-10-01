@@ -4,6 +4,18 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [0.7.0] - 2026-10-01
+
+### Added
+
+- 费用行按北京时间日期类型显示计价状态：工作日高峰/空闲、周末空闲，以及带节日名称的法定节假日空闲。
+- 增加节假日英文名称，供英文界面显示。
+
+### Changed
+
+- 法定节假日优先于周末分类；调休上班的周末仍显示为周末空闲。
+- 费用 projection 状态版本更新为 `6`，向客户端传递本地化节日名称。
+
 ## [0.6.0] - 2026-09-29
 
 ### Added

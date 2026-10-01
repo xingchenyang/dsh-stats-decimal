@@ -8,7 +8,7 @@
 - Desktop 由 Electron 加载完整 Web 应用，但拥有独立的 `$DSH_HOME/profiles/desktop`、插件包管理状态和随应用提供的 pnpm，与 Web profile 相互隔离。`dsh.client.platform: "web"` 适用于嵌入的 Web 界面。Web 使用 `dsh plugin --profile web` 命令行管理插件；Desktop 使用主应用「插件」页面，并在 Desktop profile 单独配置。
 - 上游依据：[DSH v0.2.0-rc.1 release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.0-rc.1)（commit `4878cda`）。
 - 技术栈：ESM JavaScript、Cordis Host/Web bundle、`@deepseek-ai/schemastery`、`zod`。
-- 费用 projection 的客户端可见状态版本：`stateVersion: 5`。版本 5 增加浏览器所需的法定节假日日期范围，并使已有 session usage 按修正后的峰谷规则重新折叠。
+- 费用 projection 的客户端可见状态版本：`stateVersion: 6`。版本 5 增加法定节假日日期范围；版本 6 加入中英文节日名称，客户端据此显示工作日、周末或具体节日及计价时段。
 - Desktop 通过 GitHub 仓库安装插件时，由 profile 包管理器安装插件声明的依赖；安装或更新后重启 Desktop 才会应用。已安装的 GitHub 插件可在「添加插件」中再次提交相同 URL 更新。
 - Desktop 通过本地目录安装时会登记为 `link:`，不会替链接目标安装依赖；使用此开发路径前，需在插件仓库根目录安装声明的运行时依赖。公开 `dsh` CLI 不管理 Desktop profile。
 
@@ -16,7 +16,7 @@
 
 1. Host 侧 `billingLedger` 折叠 `assistant/message` 的 usage 事件。
 2. `lib/pricing.js` 先按事件时间选择当时有效的模型价格，再按缓存桶、输出 token 及北京时间峰谷计算费用。`lib/billing-calendar/` 提供单一年度法定假日日历；周末先按谷价处理，工作日法定节假日再按谷价处理。
-3. projection 通过 `wire.viewSchema` 将累计消费、当日消费、启用币种、计价状态和仅含起止日期的假期范围传给 Web。
+3. projection 通过 `wire.viewSchema` 将累计消费、当日消费、启用币种、计价设置和含日期及中英文名称的假期范围传给 Web。
 4. Web 客户端保留 DSH 原生 `StatsPills`，在 `conversation.composer.dock` 注册费用项。`ContextMeter` 是 dock 的后续兄弟节点；客户端在费用启用时允许共享 footer 换行，并通过 flex order 将费用项放到两项原生统计之后作为独立第二行。行间距为 4px，费用行不添加背景装饰。
 5. 余额走 DSH Connection 的共享 `/api` 精确路由。Host 优先使用 DSH 凭据中的 `DEEPSEEK_API_KEY` 调用 DeepSeek `/user/balance`；未配置 API Key 时，按需读取可选的 `deepseekAccount` Host 服务并调用 `getBalance(AccountClientMetadata)`。账户 token、Platform 请求头均由 DSH provider 持有和处理，浏览器不接触凭据。
 
@@ -42,7 +42,7 @@
 ### DSH projection contract
 
 - 内部 state schema 包含 `cumulative`、`today`、`todayStamp` 和 `pricingKnown`。
-- 客户端 view schema 包含 `enabled`、`currencies`、`peakHours`、最小 `publicHolidaySpans`、`cumulative`、`today` 和 `pricingKnown`，不暴露内部 `todayStamp` 或日历来源元数据。
+- 客户端 view schema 包含 `enabled`、`currencies`、`peakHours`、带中英文节日名称的 `publicHolidaySpans`、`cumulative`、`today` 和 `pricingKnown`，不暴露内部 `todayStamp` 或日历来源元数据。
 - DSH contract 使用 `wire.viewSchema` 向客户端提供 projection 数据；缺少 `wire` 时，`useProjection("billingLedger")` 不会收到可渲染数据。
 - 修改 projection state 或 wire view shape 时，必须同步更新 schema、view、客户端消费代码和 `stateVersion`。
 - `todayStamp` 用于跨自然日折叠时先清零当日消费，避免历史事件和不同日期混算。
@@ -64,8 +64,9 @@
 
 ### 年度法定假日日历
 
-- 年度日期与来源元数据只存于 `lib/billing-calendar/<year>.js`，Host 和 Web 通过 `lib/billing-calendar/index.js` 获取数据；Web 只收到当前计价所需的起止日期。
+- 年度日期与来源元数据只存于 `lib/billing-calendar/<year>.js`，Host 和 Web 通过 `lib/billing-calendar/index.js` 获取数据；Web 收到假期起止日期及显示所需的中英文名称。
 - 年度文件保留国务院通知列出的完整假期范围，包括落在周末的日期；调休上班周末不属于假期数据。
+- 客户端状态分类优先识别法定节假日，再识别周末，最后识别工作日峰谷；此标签不改变费用计算规则。
 - 修改 projection wire view 时同步更新 schema、client 消费代码和 `stateVersion`。历史峰谷分类改变时也必须提高版本，保证旧累计金额重新折叠。
 - 目前仅内置 2026 年；未支持年份不预测节假日，沿用原工作日/周末规则。新增年度前按 `docs/BILLING_CALENDAR.md` 核对国务院办公厅通知。
 
@@ -98,9 +99,9 @@ git diff --check
 
 涉及计价时还应验证：
 
-- 北京时间工作日峰时段返回 `peak`。
-- 北京时间工作日非峰时段及周末返回 `valley`。
-- 编入日历的工作日法定假日、普通周末和调休上班周末返回 `valley`；未支持年份保留工作日回退。
+- 北京时间工作日峰时段显示 `工作日 · 高峰时段`；工作日非峰时段显示 `工作日 · 空闲时段`。
+- 普通周末及调休上班周末显示 `周末 · 空闲时段`。
+- 编入日历的法定节假日优先显示具体节日名称和空闲时段；未支持年份保留工作日回退。
 - 新旧三个 Flash ID 的内置价格完全一致。
 - 未知模型的 `costOf()` 返回 `null`。
 - 通过 `overridePricing` 添加的模型可以正常计算。
@@ -113,7 +114,7 @@ node scripts/reload-plugin.mjs --profile web
 dsh web
 ```
 
-随后硬刷新 Web 页面，检查原生 StatsPills、独立费用行是否位于完整统计栏下方、累计/今日费用、未知模型状态、余额展示、官方峰谷状态和布局。
+随后硬刷新 Web 页面，检查原生 StatsPills、独立费用行是否位于完整统计栏下方、累计/今日费用、未知模型状态、余额展示、日期类型/峰谷状态和布局。
 
 Desktop 手动检查必须通过主应用「插件」页面中的「添加插件」功能安装到其保留的 `desktop` profile，在 `$DSH_HOME/profiles/desktop/cordis.patch.yml` 单独启用费用和币种配置，再重启 Desktop。检查原生 StatsPills、费用行和余额显示。不要通过 CLI 或 Web 的 reload 脚本操作保留的 Desktop profile。
 

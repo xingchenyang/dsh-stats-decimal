@@ -121,7 +121,7 @@ test("projection exposes period configuration and invalidates old cached prices"
 	assert.match(source, /peakHours: \[\.\.\.peakHours\]/);
 	assert.match(source, /publicHolidaySpans: holidaySpansForClient\(\)/);
 	assert.match(source, /publicHolidaySpans: zod\.array/);
-	assert.match(source, /stateVersion: 5/);
+	assert.match(source, /stateVersion: 6/);
 	assert.match(source, /costOf\(buckets, model, band, currencies, table, timeEpochMs\)/);
 	assert.match(source, /const band = bandForTime\(event\.time, peakHours\);/);
 	assert.match(source, /const next = foldUsage\(base, buckets, model, band, activeCurrencies, table, true, event\.time\);/);
@@ -131,7 +131,7 @@ test("the declared runtime dependencies activate real wire-schema validation", {
 	assert.equal(hasRealWireSchema, true);
 });
 
-test("Host projection folds historical holiday usage at valley and wires minimal spans", () => {
+	test("Host projection folds historical holiday usage at valley and wires labeled spans", () => {
 	const projections = [];
 	const ctx = {
 		sessionProjections: { register: (projection) => projections.push(projection) },
@@ -169,7 +169,7 @@ test("Host projection folds historical holiday usage at valley and wires minimal
 		const view = projection.wire.view(state);
 		assert.deepEqual(view.publicHolidaySpans, holidaySpansForClient());
 		assert.ok(view.publicHolidaySpans.some((span) => span.startDate === "2026-09-25" && span.endDate === "2026-09-27"));
-		assert.ok(view.publicHolidaySpans.every((span) => Object.keys(span).sort().join(",") === "endDate,startDate"));
+		assert.ok(view.publicHolidaySpans.every((span) => Object.keys(span).sort().join(",") === "endDate,name,nameEn,startDate"));
 		if (hasRealWireSchema) assert.deepEqual(projection.wire.viewSchema.parse(view), view);
 	} finally {
 		Date.now = realNow;
