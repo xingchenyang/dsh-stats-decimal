@@ -4,7 +4,15 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
-## [Unreleased]
+## [0.5.1] - 2026-09-26
+
+### Changed
+
+- 更新 DSH 适配目标为 `v0.1.7-rc.2`，记录 Web 端费用行已实际显示，并补充 Desktop 独立 profile 的安装、配置和重启说明。
+
+### Fixed
+
+- 将费用排在输入框下方的两项原生统计之后作为独立第二行，并收紧行距，不增加背景装饰。
 
 ## [0.5.0] - 2026-09-12
 

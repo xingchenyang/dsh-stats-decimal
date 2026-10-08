@@ -1,6 +1,6 @@
-# dsh-stats-decimal v0.5.0
+# dsh-stats-decimal v0.5.1
 
-[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.1.5--rc.1-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.5-rc.1)
+[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.1.7--rc.2-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.7-rc.2)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/license-MIT-2EA44F)](LICENSE)
 
@@ -8,7 +8,7 @@
 
 ## 特性
 
-- 保留 DSH 0.1.5 原生 `StatsPills` 的轮次、速度、精确 token 和缓存命中详情。
+- 保留 DSH 0.1.7 原生 `StatsPills` 的轮次、速度、精确 token 和缓存命中详情。
 - 独立显示消费/余额账本，不覆盖 DSH 原生 `stats` 项。
 - 支持 CNY/USD 累计消费、最后一个会话自然日的消费和充值余额。
 - 按事件发生时的历史价格、模型、缓存命中/未命中、输出 token 及北京时间工作日峰谷时段估算费用。
@@ -27,9 +27,10 @@
 
 ## 兼容性与结构
 
-- 当前唯一保证的 DeepSeek Harness 版本：`v0.1.5-rc.1`。
-- 插件直接使用该版本的 projection、slot 和 RPC contract，不保证更早或其他版本。
-- 运行目标为 DSH Web profile；源码为 ESM JavaScript，依赖 `@deepseek-ai/schemastery` 和 `zod`。
+- 当前适配目标：DeepSeek Harness `v0.1.7-rc.2`。用户已确认 Web 端费用行排在原生统计 pills 和上下文圆环之后，作为紧凑、清晰的第二行显示。
+- 插件使用 projection、slot 和 RPC contract；不据此承诺其他 DSH 版本。
+- Desktop 使用同一 Web 界面，但插件和配置位于独立的 `desktop` profile。安装成功后仍需在该 profile 启用费用配置；详见下文。
+- 源码为 ESM JavaScript，依赖 `@deepseek-ai/schemastery` 和 `zod`。
 
 ```text
 lib/index.js             Host 插件、配置 schema、billingLedger projection、余额 RPC
@@ -41,7 +42,7 @@ scripts/reload-plugin.mjs 删除并重新安装 file: 插件快照
 
 ## 显示内容
 
-DSH 原生统计保持不变；插件在其后追加独立费用行。金额按两位小数直接截断，不四舍五入。
+DSH 原生统计保持不变；插件在输入框下方的统计带中追加独立费用行，排在原生统计 pills 和上下文圆环之后。费用行紧接原生行显示，不加背景装饰。金额按两位小数直接截断，不四舍五入。
 
 费用账本示例：
 
@@ -69,6 +70,10 @@ dsh plugin --profile web add file:./dsh-stats-decimal
 ```
 
 `file:./dsh-stats-decimal` 从当前 shell 目录解析，不从 profile 目录解析。`add` 会把插件写入 profile 并自动加入 `dsh.profile.bundles`，无需手动 insert。
+
+### DeepSeek Harness Desktop
+
+在 Desktop 自带的「插件」页使用 GitHub 仓库地址安装。Desktop 独占 `$DSH_HOME\profiles\desktop`，与 Web 的 `profiles\web` 分开保存；请勿用 `dsh plugin --profile desktop` 或本仓库的重装脚本管理它。安装完成后按下方说明配置 Desktop profile，并重启 Desktop。
 
 ## 更新与卸载
 
@@ -102,7 +107,7 @@ dsh plugin --profile web remove dsh-stats-decimal
 
 ## 配置
 
-编辑 `$DSH_HOME\profiles\web\cordis.patch.yml`；文件不存在时新建，顶层必须是 YAML 数组：
+编辑 `$DSH_HOME\profiles\web\cordis.patch.yml`；文件不存在时新建，顶层必须是 YAML 数组。Desktop 则编辑 `$DSH_HOME\profiles\desktop\cordis.patch.yml`，使用相同配置：
 
 ```yaml
 - id: stats-decimal
@@ -117,7 +122,7 @@ dsh plugin --profile web remove dsh-stats-decimal
       # apiBase: 'https://api.deepseek.com'
 ```
 
-改完后重启 `dsh web` 并硬刷新（Ctrl+F5）。所有开关默认关闭：
+改完后重启 `dsh web` 并硬刷新（Ctrl+F5）。Desktop 改完后重启 Desktop。仅安装插件不会显示费用行，因为 `enableCost`、`cnyEnabled` 和 `usdEnabled` 默认都是 `false`；Web 与 Desktop 的配置互不继承。所有开关默认关闭：
 
 | 配置 | 默认值 | 作用 |
 |---|---:|---|
