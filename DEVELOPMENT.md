@@ -4,7 +4,6 @@
 
 ## 当前状态
 
-- 当前版本：`0.5.2`。
 - 当前适配目标：DeepSeek Harness `v0.1.7-rc.2`。用户确认升级后的 Web 能显示费用数据，且费用行排在原生统计 pills 和上下文圆环之后，作为紧凑、清晰的第二行显示。运行时 DOM 显示上下文圆环是 composer dock 的后续兄弟节点；当前费用项仍注册在 `conversation.composer.dock` 并通过 footer flex order 排在两项原生统计之后，行距为 4px，不加背景装饰。
 - Desktop 由 Electron 加载完整 Web 应用，但拥有独立的 `$DSH_HOME/profiles/desktop`、插件包管理状态和随应用提供的 pnpm，与 Web profile 相互隔离。`dsh.client.platform: "web"` 适用于嵌入的 Web 界面。插件管理按运行环境区分：Web 使用 `dsh plugin --profile web` 命令行；Desktop 使用主应用「插件」页面中的「添加插件」功能，并在 Desktop profile 单独配置。
 - 上游依据：[Desktop v0.1.7-rc.2 中文说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.7-rc.2/apps/desktop/README.zh.md)、[插件管理器 v0.1.7-rc.2 中文说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.7-rc.2/packages/boot/plugin-manager/README.zh.md)。
@@ -20,7 +19,7 @@
 2. `lib/pricing.js` 先按事件时间选择当时有效的模型价格，再按缓存桶、输出 token 及北京时间工作日峰谷计算费用。
 3. projection 通过 `wire.viewSchema` 将累计消费、当日消费、启用币种和计价状态传给 Web。
 4. Web 客户端保留 DSH 原生 `StatsPills`，在 `conversation.composer.dock` 注册费用项。DSH 0.1.7-rc.2 把 `ContextMeter` 作为 dock 的后续兄弟节点；客户端在费用启用时允许共享 footer 换行，并通过 flex order 将费用项放到两项原生统计之后作为独立第二行。行间距为 4px，费用行不添加背景装饰。
-5. 余额走独立的 loopback RPC `/stats-decimal`；Host 调用 DeepSeek `/user/balance`，浏览器不接触 API Key。
+5. 余额走 DSH Connection 的共享 `/api` 精确路由；Host 调用 DeepSeek `/user/balance`，浏览器不接触 API Key。
 
 余额不写入 Session。Session 日志拒绝未知事件类型，而 projection 已足以提供会话累计数据；因此不向 Session 追加插件自定义余额事件。
 
@@ -66,17 +65,15 @@
 
 - API Key 只在 Host 侧解析和使用，按 `.credentials.yaml`、credentials service、进程环境的顺序读取。
 - API Key 不得进入 client bundle、projection、Session 日志、URL 或普通错误输出。
-- 余额通过 Host 的 `/stats-decimal` loopback RPC 提供，客户端只收到余额数值、可用状态和安全错误标记。
+- 余额通过 Host 注册的 `/api/stats-decimal/getBalance` 精确路由提供，客户端只收到余额数值、可用状态和安全错误标记。
 - 余额失败、没有 Key 或没有对应币种余额时返回空值；余额读取独立于模型费用计价。
 
 ## 已知限制
 
 - “今日”按会话日志最后一个自然日累计；打开较早历史会话时，不一定代表现实中的今天。
 - 费用为本地估算，最终结果以 DeepSeek 官方账单为准。
-- 待解决：当前组合（插件 `v0.5.2`、DSH `v0.1.7-rc.2`）中“余额”不显示；目前无法判断是插件版本还是 DSH 版本导致。
-- Web 端在 `conversation.composer.dock` 注册 `stats-decimal-billing`。由于 `ContextMeter` 位于 dock slot 外部、但仍是同一 footer 的后续兄弟节点，组件启用时允许 footer 换行，并通过 flex order 将费用排在完整原生统计栏之后作为独立第二行。行间距收紧到 4px，不添加背景装饰。卸载或关闭费用时恢复 footer 原来的 `flex-wrap` 和 `row-gap`。
 - 余额依赖 DSH Host 能读取现有 `DEEPSEEK_API_KEY` 凭据，并依赖 DeepSeek `/user/balance` 的响应格式。
-- 用户提供的运行时 DOM 显示 `ContextMeter` 是 `conversation.composer.dock` slot 的后续兄弟节点，因此仅增加 slot `order` 不能把费用放到它之后。当前客户端将费用排到 ContextMeter 后方作为独立第二行，使用 4px 行距且不加背景，Web 布局已由用户确认。Desktop 本地目录安装只链接仓库，不安装链接包依赖；使用该开发路径前，需在插件仓库根目录运行 `npm install --omit=dev --no-package-lock --ignore-scripts`。Desktop GitHub 安装由 profile pnpm 安装声明的依赖，安装后需重启 Desktop。安装后还需检查 Desktop profile 的 `cordis.patch.yml` 是否启用了费用和币种；这些开关默认关闭。
+- Desktop 本地目录安装只链接仓库，不安装链接包依赖；使用该开发路径前，需在插件仓库根目录运行 `npm install --omit=dev --no-package-lock --ignore-scripts`。Desktop GitHub 安装由 profile pnpm 安装声明的依赖，安装后需重启 Desktop。安装后还需检查 Desktop profile 的 `cordis.patch.yml` 是否启用了费用和币种；这些开关默认关闭。
 
 ## 构建与验证
 
@@ -116,7 +113,12 @@ Desktop 手动检查必须通过主应用「插件」页面中的「添加插件
 ## 发布检查
 
 1. 运行 `npm run check:upstream`；如果英文 canonical 侧栏目录发生变化，打开新增页面，人工确认价格、生效时间和公告状态，再更新基线。
-2. 确定版本号和发布日期，更新 `package.json`、`README.md`、`DEVELOPMENT.md` 和 `CHANGELOG.md`。
+2. 确定版本号和发布日期：
+   - 更新 `package.json` 中的版本号；
+   - 在 `CHANGELOG.md` 建立对应版本章节；
+   - 只有安装、配置、兼容性或当前使用行为变化时更新 `README.md`；
+   - 只有架构、限制、关键决策或维护流程变化时更新 `DEVELOPMENT.md`；
+   - 只有仓库维护约束变化时更新 `AGENTS.md`。
 3. 核对 DSH projection、slot、locale 和 RPC contract；不凭经验扩大兼容范围。
 4. 运行语法检查、计价回归和 `git diff --check`。
 5. 用测试 profile 重新安装插件，确认原生 StatsPills、独立费用项、峰谷状态、未知模型和余额降级行为。

@@ -1,4 +1,4 @@
-# dsh-stats-decimal v0.5.2
+# dsh-stats-decimal
 
 [![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.1.7--rc.2-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.7-rc.2)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6)](https://www.microsoft.com/windows)
@@ -64,7 +64,7 @@ PEAK  CNY Total ¥3.55 · Today ¥0.95 · Balance ¥27.21 | USD Total $0.50 · T
 
 ### Desktop：使用「添加插件」功能
 
-在 Desktop 主应用侧栏打开「插件」页面，点击「添加插件」，再输入 GitHub 仓库地址：
+在 Desktop 主应用侧栏打开「插件」页面，点击「添加插件」，再输入 GitHub 仓库地址（推荐）：
 
 ```text
 https://github.com/xingchenyang/dsh-stats-decimal
