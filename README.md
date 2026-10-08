@@ -1,36 +1,39 @@
-# dsh-stats-decimal v0.4.0
+# dsh-stats-decimal v0.5.0
 
-[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.1.2--rc.1-4D6BFE)](https://github.com/deepseek-ai)
+[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.1.5--rc.1-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.5-rc.1)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/license-MIT-2EA44F)](LICENSE)
 
-一个运行在 DeepSeek Harness Web 会话中的 Cordis 插件。它修正内置统计栏的数字精度，并可追加 CNY/USD 消费与充值余额账本。费用在 Host 侧按会话事件计算，余额通过 loopback RPC 读取，API Key 不进入浏览器或 Session 日志。
+一个运行在 DeepSeek Harness Web 会话中的 Cordis 插件。它保留 DSH 原生可展开统计，并追加 CNY/USD 消费、充值余额与当前计价时段。费用在 Host 侧按会话事件计算，余额通过 RPC 读取，API Key 不进入浏览器或 Session 日志。
 
 ## 特性
 
-- 缓存命中率、K/M/G token 数和金额均按两位小数直接截断，永不四舍五入。
-- 将会话摘要、token 统计和消费/余额账本分行显示，避免关键数字被省略。
+- 保留 DSH 0.1.5 原生 `StatsPills` 的轮次、速度、精确 token 和缓存命中详情。
+- 独立显示消费/余额账本，不覆盖 DSH 原生 `stats` 项。
 - 支持 CNY/USD 累计消费、最后一个会话自然日的消费和充值余额。
-- 按模型、缓存命中/未命中、输出 token 及北京时间工作日峰谷时段估算费用。
-- 周六、周日固定按谷价；支持为已有或自定义模型覆盖完整价格表。
+- 按事件发生时的历史价格、模型、缓存命中/未命中、输出 token 及北京时间工作日峰谷时段估算费用。
+- 显示当前官方计价时段：`空闲时段 / 高峰时段`、`OFF-PEAK / PEAK`。
+- 周六、周日固定按空闲时段；支持为已有或自定义模型覆盖完整价格表。
 - 未配置价格的模型显示 `费用未知 / Cost unknown`，不套用其他模型价格。
-- 精度修复始终生效；费用和余额功能由配置开关控制，默认关闭。
+- 费用和余额功能由配置开关控制，默认关闭。
 
 ## 文档
 
 - [CHANGELOG.md](CHANGELOG.md)：版本与用户可见变化。
 - [DEVELOPMENT.md](DEVELOPMENT.md)：架构、兼容性约束、测试与发布流程。
+- [docs/PRICING_HISTORY.md](docs/PRICING_HISTORY.md)：历史价格、公告状态与官方来源。
+- [docs/DEEPSEEK_NEWS_INDEX.md](docs/DEEPSEEK_NEWS_INDEX.md)：从官网侧栏整理的中英文新闻入口。
 - [AGENTS.md](AGENTS.md)：自动化 Agent 和维护者必须遵守的仓库规则。
 
 ## 兼容性与结构
 
-- 当前唯一保证的 DeepSeek Harness 版本：`v0.1.2-rc.1`。
+- 当前唯一保证的 DeepSeek Harness 版本：`v0.1.5-rc.1`。
 - 插件直接使用该版本的 projection、slot 和 RPC contract，不保证更早或其他版本。
 - 运行目标为 DSH Web profile；源码为 ESM JavaScript，依赖 `@deepseek-ai/schemastery` 和 `zod`。
 
 ```text
 lib/index.js             Host 插件、配置 schema、billingLedger projection、余额 RPC
-lib/client.js            Web 统计栏、数字格式化、本地化和余额轮询
+lib/client.js            Web 费用/时段状态、本地化和余额轮询
 lib/pricing.js           模型价格表、价格覆盖、费用计算和北京时间峰谷判断
 cordis.patch.yml         Cordis bundle 注册入口
 scripts/reload-plugin.mjs 删除并重新安装 file: 插件快照
@@ -38,21 +41,13 @@ scripts/reload-plugin.mjs 删除并重新安装 file: 插件快照
 
 ## 显示内容
 
-精度修复示例：
-
-| 项目 | 内置显示 | 修复后 |
-|---|---|---|
-| 缓存命中 | `99%` 或 `100%` | `99.78%` |
-| 输入 token | `124.6M` | `124.66M tok` |
-| 输出 token | `236.2K` | `236.18K tok` |
-
-缓存命中率使用整数运算截断到两位小数，只有真实达到 100% 时才显示 `100.00%`。K/M/G 量级的 token 恒显示两位小数并截断，少于 1000 token 时显示整数。
+DSH 原生统计保持不变；插件在其后追加独立费用行。金额按两位小数直接截断，不四舍五入。
 
 费用账本示例：
 
 ```text
-CNY 累计 ¥3.55 · 今日 ¥0.95 · 余额 ¥27.21 | USD 累计 $0.50 · 今日 $0.13 · 余额 $0.00
-CNY Total ¥3.55 · Today ¥0.95 · Balance ¥27.21 | USD Total $0.50 · Today $0.13 · Balance $0.00
+高峰时段  CNY 累计 ¥3.55 · 今日 ¥0.95 · 余额 ¥27.21 | USD 累计 $0.50 · 今日 $0.13 · 余额 $0.00
+PEAK  CNY Total ¥3.55 · Today ¥0.95 · Balance ¥27.21 | USD Total $0.50 · Today $0.13 · Balance $0.00
 ```
 
 每个启用币种只出现一次；多币种用 `|` 分隔，单币种不显示分隔符。费用未知时显示 `费用未知 / Cost unknown`，不影响余额显示。
@@ -130,8 +125,9 @@ dsh plugin --profile web remove dsh-stats-decimal
 | `cnyEnabled` | `false` | 显示 CNY 片段 |
 | `usdEnabled` | `false` | 显示 USD 片段 |
 | `balance.enabled` | `false` | 在消费片段中追加余额 |
+| `peakHours` | `[9,10,11,14,15,16,17]` | 北京时间工作日高峰钟点 |
 
-精度修复不受这些开关影响。消费行只有在 `enableCost=true` 且至少启用一个币种时显示。每个币种显示“累计/Total · 今日/Today”；余额开关打开后再追加“余额/Balance”。
+消费行只有在 `enableCost=true` 且至少启用一个币种时显示。每个币种显示“累计/Total · 今日/Today”；余额开关打开后再追加“余额/Balance”。
 
 ### `peakHours`
 
@@ -139,11 +135,23 @@ dsh plugin --profile web remove dsh-stats-decimal
 
 ### 价格与模型
 
+官方价格与历史查询入口：
+
+- [人民币（CNY）价格表](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)
+- [美元（USD）价格表](https://api-docs.deepseek.com/quick_start/pricing/)
+- [官网侧栏新闻目录](docs/DEEPSEEK_NEWS_INDEX.md)：部分独立新闻正文包含具体价格、优惠截止时间和调价生效时间。
+- [中文更新日志](https://api-docs.deepseek.com/zh-cn/updates) / [英文更新日志](https://api-docs.deepseek.com/updates/)：主要用于核对模型迭代顺序；只有明确出现价格内容时才作为价格证据。
+
 内置价格表覆盖：
 
+- `deepseek-flash`
 - `deepseek-v4-flash`
 - `deepseek-v4-pro`
 - `deepseek-v4-flash-vision-exp`（与 Flash 同价）
+
+两个旧 Flash 名称仍可调用，但由 DeepSeek-V4.1-Flash 提供服务并按当前 Flash 价格计费，因此三个 Flash ID 的当前价格相同。重放旧会话时，插件会根据每条消息的发生时间选择当时已经生效的价格；模型尚未发布或价格资料不完整的时间段显示费用未知，不用当前价格倒推。
+
+内置历史价格及公告依据见 [价格历史档案](docs/PRICING_HISTORY.md)。其中 2026 年 9 月 14 日将 Pro 路由至 Flash 的原计划已经撤回，不构成计费断点；`deepseek-v4-pro` 继续按 Pro 价格计费。
 
 将以下内容放在前例的 `config` 下；`overridePricing` 可覆盖已有模型或添加其他模型：
 
@@ -151,11 +159,11 @@ dsh plugin --profile web remove dsh-stats-decimal
 overridePricing:
   my-model:
     cny:
-      peak: { cacheHit: 0.1, cacheMiss: 3.0, output: 9.0 }
-      valley: { cacheHit: 0.05, cacheMiss: 1.5, output: 4.5 }
+      peak: { cacheHit: 0.04, cacheMiss: 2.0, output: 8.0 }
+      valley: { cacheHit: 0.02, cacheMiss: 1.0, output: 4.0 }
     usd:
-      peak: { cacheHit: 0.014, cacheMiss: 0.44, output: 1.32 }
-      valley: { cacheHit: 0.007, cacheMiss: 0.22, output: 0.66 }
+      peak: { cacheHit: 0.006, cacheMiss: 0.3, output: 1.2 }
+      valley: { cacheHit: 0.003, cacheMiss: 0.15, output: 0.6 }
 ```
 
 每个启用币种都必须有 `peak` 和 `valley` 下的 `cacheHit`、`cacheMiss`、`output` 三项价格，否则该模型费用显示未知。

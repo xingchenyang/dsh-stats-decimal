@@ -1,9 +1,13 @@
 {
   "name": "dsh-stats-decimal",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "main": "lib/index.js",
-  "description": "DSH v0.1.2-rc.1 plugin: shadows the built-in conversation stats line with a decimal cache-hit percentage, and adds a per-currency (CNY/USD) cost row via a host-side pure projection plus a browser-fetched recharge balance row.",
+  "description": "DSH v0.1.5-rc.1 plugin: preserves the native StatsPills and adds CNY/USD cost, recharge balance, and Beijing-time pricing-period status.",
+  "scripts": {
+    "test": "node --test",
+    "check:upstream": "node scripts/check-deepseek-docs.mjs"
+  },
   "exports": {
     ".": {
       "default": "./lib/index.js"
