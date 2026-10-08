@@ -4,22 +4,21 @@
 
 ## 当前状态
 
-- 当前适配目标：DeepSeek Harness `v0.1.7-rc.2`。用户确认升级后的 Web 能显示费用数据，且费用行排在原生统计 pills 和上下文圆环之后，作为紧凑、清晰的第二行显示。运行时 DOM 显示上下文圆环是 composer dock 的后续兄弟节点；当前费用项仍注册在 `conversation.composer.dock` 并通过 footer flex order 排在两项原生统计之后，行距为 4px，不加背景装饰。
-- Desktop 由 Electron 加载完整 Web 应用，但拥有独立的 `$DSH_HOME/profiles/desktop`、插件包管理状态和随应用提供的 pnpm，与 Web profile 相互隔离。`dsh.client.platform: "web"` 适用于嵌入的 Web 界面。插件管理按运行环境区分：Web 使用 `dsh plugin --profile web` 命令行；Desktop 使用主应用「插件」页面中的「添加插件」功能，并在 Desktop profile 单独配置。
-- 上游依据：[Desktop v0.1.7-rc.2 中文说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.7-rc.2/apps/desktop/README.zh.md)、[插件管理器 v0.1.7-rc.2 中文说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.7-rc.2/packages/boot/plugin-manager/README.zh.md)。
-- 上一验证基线为顶层 `@deepseek-ai/dsh` `0.1.5-rc.1`；其 caret 依赖曾解析为 `0.1.5-rc.2`。当前适配目标不向更早或其他 DSH 版本外推。
+- 当前适配目标：DeepSeek Harness `v0.2.0-rc.1`（官方 release commit `4878cda`）。用户在 Desktop 的 GitHub 安装环境确认账户登录模式余额正常显示；这项运行验证仅覆盖该路径。
+- Desktop 由 Electron 加载完整 Web 应用，但拥有独立的 `$DSH_HOME/profiles/desktop`、插件包管理状态和随应用提供的 pnpm，与 Web profile 相互隔离。`dsh.client.platform: "web"` 适用于嵌入的 Web 界面。Web 使用 `dsh plugin --profile web` 命令行管理插件；Desktop 使用主应用「插件」页面，并在 Desktop profile 单独配置。
+- 上游依据：[DSH v0.2.0-rc.1 release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.0-rc.1)（commit `4878cda`）。
 - 技术栈：ESM JavaScript、Cordis Host/Web bundle、`@deepseek-ai/schemastery`、`zod`。
 - 费用 projection 的客户端可见状态版本：`stateVersion: 4`。
-- DSH `v0.1.7-rc.2` 的 Web 端费用行正常显示。Desktop 通过「添加插件」功能选择本地目录时，profile 将仓库登记为 `link:`，不会替链接目标安装依赖：此前 Desktop profile 缺少 `@deepseek-ai/schemastery` 和 `zod`，触发 `ERR_MODULE_NOT_FOUND`；在插件仓库根目录安装声明的运行时依赖后，Desktop 链接路径可导入，费用行正常显示。Web 的 `file:` 命令行安装由 profile 包管理器安装本地包及其依赖。
-- 2026-09-26 的 Desktop GitHub 安装记录：从 Desktop 主应用「插件」页面点击「添加插件」，输入 `https://github.com/xingchenyang/dsh-stats-decimal`。Desktop profile 使用 pnpm `11.7.0`；安装后 `package.json` 声明 GitHub 依赖并加入 bundle，`pnpm-lock.yaml` 锁定 commit `5d6f76c2b3543b90dd411da5bd60b11730f2e239`。pnpm 从插件 `package.json` 安装 `@deepseek-ai/schemastery@3.18.4`、`zod@4.6.5` 及其传递依赖，无需预装在 Desktop profile。点击「立即启用」后还需重启 Desktop 才应用。公开 `dsh` CLI 不能管理 Desktop profile。升级 DSH 时必须重新验证 projection、slot、locale 和 RPC contract。
+- Desktop 通过 GitHub 仓库安装插件时，由 profile 包管理器安装插件声明的依赖；安装或更新后重启 Desktop 才会应用。已安装的 GitHub 插件可在「添加插件」中再次提交相同 URL 更新。
+- Desktop 通过本地目录安装时会登记为 `link:`，不会替链接目标安装依赖；使用此开发路径前，需在插件仓库根目录安装声明的运行时依赖。公开 `dsh` CLI 不管理 Desktop profile。
 
 ## 架构与数据流
 
 1. Host 侧 `billingLedger` 折叠 `assistant/message` 的 usage 事件。
 2. `lib/pricing.js` 先按事件时间选择当时有效的模型价格，再按缓存桶、输出 token 及北京时间工作日峰谷计算费用。
 3. projection 通过 `wire.viewSchema` 将累计消费、当日消费、启用币种和计价状态传给 Web。
-4. Web 客户端保留 DSH 原生 `StatsPills`，在 `conversation.composer.dock` 注册费用项。DSH 0.1.7-rc.2 把 `ContextMeter` 作为 dock 的后续兄弟节点；客户端在费用启用时允许共享 footer 换行，并通过 flex order 将费用项放到两项原生统计之后作为独立第二行。行间距为 4px，费用行不添加背景装饰。
-5. 余额走 DSH Connection 的共享 `/api` 精确路由；Host 调用 DeepSeek `/user/balance`，浏览器不接触 API Key。
+4. Web 客户端保留 DSH 原生 `StatsPills`，在 `conversation.composer.dock` 注册费用项。`ContextMeter` 是 dock 的后续兄弟节点；客户端在费用启用时允许共享 footer 换行，并通过 flex order 将费用项放到两项原生统计之后作为独立第二行。行间距为 4px，费用行不添加背景装饰。
+5. 余额走 DSH Connection 的共享 `/api` 精确路由。Host 优先使用 DSH 凭据中的 `DEEPSEEK_API_KEY` 调用 DeepSeek `/user/balance`；未配置 API Key 时，按需读取可选的 `deepseekAccount` Host 服务并调用 `getBalance(AccountClientMetadata)`。账户 token、Platform 请求头均由 DSH provider 持有和处理，浏览器不接触凭据。
 
 余额不写入 Session。Session 日志拒绝未知事件类型，而 projection 已足以提供会话累计数据；因此不向 Session 追加插件自定义余额事件。
 
@@ -42,7 +41,7 @@
 
 - 内部 state schema 包含 `cumulative`、`today`、`todayStamp` 和 `pricingKnown`。
 - 客户端 view schema 包含 `enabled`、`currencies`、`peakHours`、`cumulative`、`today` 和 `pricingKnown`，不暴露内部 `todayStamp`。
-- 当前适配目标 DSH `v0.1.7-rc.2` 使用 `wire.viewSchema` 向客户端提供 projection 数据；缺少 `wire` 时，`useProjection("billingLedger")` 不会收到可渲染数据。
+- DSH contract 使用 `wire.viewSchema` 向客户端提供 projection 数据；缺少 `wire` 时，`useProjection("billingLedger")` 不会收到可渲染数据。
 - 修改 projection state 或 wire view shape 时，必须同步更新 schema、view、客户端消费代码和 `stateVersion`。
 - `todayStamp` 用于跨自然日折叠时先清零当日消费，避免历史事件和不同日期混算。
 
@@ -66,13 +65,15 @@
 - API Key 只在 Host 侧解析和使用，按 `.credentials.yaml`、credentials service、进程环境的顺序读取。
 - API Key 不得进入 client bundle、projection、Session 日志、URL 或普通错误输出。
 - 余额通过 Host 注册的 `/api/stats-decimal/getBalance` 精确路由提供，客户端只收到余额数值、可用状态和安全错误标记。
-- 余额失败、没有 Key 或没有对应币种余额时返回空值；余额读取独立于模型费用计价。
+- 配置了 `DEEPSEEK_API_KEY` 时，余额使用 API Key 路径；只有未配置 Key 时才查询可选的 `deepseekAccount` 服务。服务通过 `ctx.get()` 按请求查找，不把账号服务设成插件的必需依赖。
+- `deepseekAccount.getBalance()` 的调用元数据仅包含 DSH 客户端版本、请求语言和时区偏移；余额映射仅读取充值钱包的 `value`，赠送钱包不并入余额。
+- 余额失败、没有 API Key 且没有已登录账号，或没有对应币种余额时返回空值；余额读取独立于模型费用计价。
 
 ## 已知限制
 
 - “今日”按会话日志最后一个自然日累计；打开较早历史会话时，不一定代表现实中的今天。
 - 费用为本地估算，最终结果以 DeepSeek 官方账单为准。
-- 余额依赖 DSH Host 能读取现有 `DEEPSEEK_API_KEY` 凭据，并依赖 DeepSeek `/user/balance` 的响应格式。
+- 余额依赖以下任一 Host 能力：`DEEPSEEK_API_KEY` 凭据及 DeepSeek `/user/balance` 响应格式，或 DSH `deepseekAccount.getBalance()` 服务及其 Platform 钱包结构。API Key 路径优先；未配置 API Key 才使用账户登录路径。
 - Desktop 本地目录安装只链接仓库，不安装链接包依赖；使用该开发路径前，需在插件仓库根目录运行 `npm install --omit=dev --no-package-lock --ignore-scripts`。Desktop GitHub 安装由 profile pnpm 安装声明的依赖，安装后需重启 Desktop。安装后还需检查 Desktop profile 的 `cordis.patch.yml` 是否启用了费用和币种；这些开关默认关闭。
 
 ## 构建与验证

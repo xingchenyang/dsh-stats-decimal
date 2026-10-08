@@ -1,6 +1,6 @@
 # dsh-stats-decimal
 
-[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.1.7--rc.2-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.7-rc.2)
+[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.2.0--rc.1-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.0-rc.1)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/license-MIT-2EA44F)](LICENSE)
 
@@ -8,7 +8,7 @@
 
 ## 特性
 
-- 保留 DSH 0.1.7 原生 `StatsPills` 的轮次、速度、精确 token 和缓存命中详情。
+- 保留 DSH 原生 `StatsPills` 的轮次、速度、精确 token 和缓存命中详情。
 - 独立显示消费/余额账本，不覆盖 DSH 原生 `stats` 项。
 - 支持 CNY/USD 累计消费、最后一个会话自然日的消费和充值余额。
 - 按事件发生时的历史价格、模型、缓存命中/未命中、输出 token 及北京时间工作日峰谷时段估算费用。
@@ -27,7 +27,7 @@
 
 ## 兼容性与结构
 
-- 当前适配目标：DeepSeek Harness `v0.1.7-rc.2`。用户已确认 Web 端费用行排在原生统计 pills 和上下文圆环之后，作为紧凑、清晰的第二行显示。
+- 当前适配目标：DeepSeek Harness `v0.2.0-rc.1`。已在 Desktop GitHub 安装环境确认账户登录模式的充值余额可显示；更广泛的兼容性仍以已验证的源码 contract 为准。
 - 插件使用 projection、slot 和 RPC contract；不据此承诺其他 DSH 版本。
 - Desktop 使用同一 Web 界面，但插件和配置位于独立的 `desktop` profile。安装成功后仍需在该 profile 启用费用配置；详见下文。
 - 源码为 ESM JavaScript，依赖 `@deepseek-ai/schemastery` 和 `zod`。
@@ -70,7 +70,11 @@ PEAK  CNY Total ¥3.55 · Today ¥0.95 · Balance ¥27.21 | USD Total $0.50 · T
 https://github.com/xingchenyang/dsh-stats-decimal
 ```
 
-安装成功后点击「立即启用」，再重启 DSH Desktop，插件才会应用。GitHub 安装会由 Desktop profile 的 pnpm 安装插件声明的依赖，无需预先在本地源码目录安装依赖。未指定 Git ref 时，pnpm 使用默认分支的最新提交，并将解析到的 commit 写入 profile lockfile；GitHub Release 不参与选择。
+首次安装成功后点击「立即启用」，再重启 DSH Desktop，插件才会应用。GitHub 安装会由 Desktop profile 的 pnpm 安装插件声明的依赖，无需预先在本地源码目录安装依赖。未指定 Git ref 时，pnpm 使用默认分支的最新提交，并将解析到的 commit 写入 profile lockfile；GitHub Release 不参与选择。
+
+更新已通过 GitHub 安装的插件时，在「添加插件」中再次输入同一个仓库 URL 即可；不必先卸载插件或重装 DSH Desktop。更新后重启 Desktop，使新代码生效。
+
+**已知误报（DSH `v0.2.0-rc.1`）**：对已安装插件再次提交同一 GitHub URL 后，pnpm 可能正常结束并显示 `Already up to date`、`added 0`、`Done`，但插件页面随后提示“无法从依赖变更中确定安装了哪一个包”。本项目观察到此提示时插件版本已更新，重启后账户登录余额正常显示；在这种情况下，pnpm 结果和更新后的版本比该提示更能反映安装结果。若 pnpm 本身报错、重启后版本未变化或功能仍不可用，应按实际安装失败处理。
 
 需要安装本地源码时，也可在同一「添加插件」功能中选择本地插件目录。此方式登记为 `link:`，不会替源码目录安装依赖；在仓库根目录先运行以下命令，再在「添加插件」表单中选择仓库根目录。该命令只准备源码依赖，不会向 DSH 安装插件：
 
@@ -113,7 +117,7 @@ dsh plugin --profile web add file:./dsh-stats-decimal
 dsh web
 ```
 
-`file:./dsh-stats-decimal` 从当前 shell 目录解析，不从 profile 目录解析。`add` 会把插件写入 profile 并自动加入 `dsh.profile.bundles`，无需手动 insert。此命令管理 Web profile；官方 Desktop profile 由 Desktop 应用独占，不能用公共 `dsh` CLI 管理，参见 [Desktop 中文说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.7-rc.2/apps/desktop/README.zh.md)。
+`file:./dsh-stats-decimal` 从当前 shell 目录解析，不从 profile 目录解析。`add` 会把插件写入 profile 并自动加入 `dsh.profile.bundles`，无需手动 insert。此命令管理 Web profile；官方 Desktop profile 由 Desktop 应用独占，不能用公共 `dsh` CLI 管理，参见 [Desktop 中文说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.1/apps/desktop/README.zh.md)。
 
 ## 更新与卸载
 
@@ -145,7 +149,7 @@ dsh plugin --profile web remove dsh-stats-decimal
 
 如果 profile 的 `cordis.patch.yml` 仍有 `stats-decimal` 条目，建议一并删除；遗留条目不会影响重新安装。
 
-Desktop 插件通过 Desktop 的「插件」页面管理；添加或重装时使用「添加插件」功能，完成后重启 Desktop。Web 通过命令行和重装脚本管理。两种方式操作各自独立的 profile。
+Desktop 插件通过 Desktop 的「插件」页面管理；首次安装和 GitHub 更新都使用「添加插件」功能，更新已安装插件时再次填写同一 URL，完成后重启 Desktop。Web 通过命令行和重装脚本管理。两种方式操作各自独立的 profile。
 
 ## 配置
 
@@ -217,10 +221,12 @@ overridePricing:
 
 ### 余额
 
-- 不需要配置 `apiKey`；Host 按 DSH 的凭据优先级复用 `DEEPSEEK_API_KEY`（包括 `$DSH_HOME\.credentials.yaml`）。
+- Host 优先复用 DSH 的 `DEEPSEEK_API_KEY`（包括 `$DSH_HOME\.credentials.yaml`），通过 DeepSeek API 查询余额。
+- 未配置 API Key 时，如果 DSH 提供 `deepseekAccount` 服务，则通过其登录态读取账户充值余额；不需要把账户 token 或 `apiKey` 配进本插件。
+- API Key 与账户登录同时可用时，API Key 路径优先。账户登录路径读取充值钱包，不包含赠送钱包。
 - API Key 只在 Host 侧解析和使用，不进入浏览器、projection 或 Session 日志。
 - 页面加载时读取一次，之后每 5 分钟轮询；刷新页面即可手动刷新。
-- Key 为空、请求降级或该币种没有余额时显示 `余额 – / Balance –`。
+- 没有可用凭据、请求失败或该币种没有充值余额时显示 `余额 – / Balance –`。
 
 ## 注意事项
 

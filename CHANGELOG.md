@@ -4,7 +4,17 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
-## [Unreleased]
+## [0.5.4] - 2026-09-28
+
+### Added
+
+- 支持在没有 `DEEPSEEK_API_KEY` 时，通过 DSH `deepseekAccount` Host 服务读取账户登录模式的充值余额；保留 API Key 路径优先级，不读取或传递账户 token。
+
+### Changed
+
+- 将适配目标更新为 DSH `v0.2.0-rc.1`。
+- 补充 Desktop GitHub 插件更新方式：在「添加插件」中再次填写同一仓库 URL，更新后重启 Desktop。
+- 记录本次观察到的状态不一致：pnpm 显示 `Done` 且插件版本更新后，界面仍可能提示“无法从依赖变更中确定安装了哪一个包”；核对安装详情、版本并重启以确认实际结果。
 
 ## [0.5.3] - 2026-09-26
 
