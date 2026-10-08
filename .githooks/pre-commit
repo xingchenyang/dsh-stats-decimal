@@ -1,0 +1,31 @@
+#!/bin/sh
+set -eu
+
+expected_name='dsh-stats-decimal'
+expected_email='dsh-stats-decimal@example.invalid'
+expected_prefix="$expected_name <$expected_email> "
+
+author="$(git var GIT_AUTHOR_IDENT)"
+committer="$(git var GIT_COMMITTER_IDENT)"
+
+case "$author" in
+  "$expected_prefix"*)
+    ;;
+  *)
+    echo "ERROR: Git author identity is not dsh-stats-decimal." >&2
+    echo "Actual:   $author" >&2
+    echo "Expected: dsh-stats-decimal <dsh-stats-decimal@example.invalid>" >&2
+    exit 1
+    ;;
+esac
+
+case "$committer" in
+  "$expected_prefix"*)
+    ;;
+  *)
+    echo "ERROR: Git committer identity is not dsh-stats-decimal." >&2
+    echo "Actual:   $committer" >&2
+    echo "Expected: dsh-stats-decimal <dsh-stats-decimal@example.invalid>" >&2
+    exit 1
+    ;;
+esac
