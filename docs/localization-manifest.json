@@ -1,0 +1,25 @@
+{
+  "canonicalLanguage": "English",
+  "canonicalEntryPoint": "README.md",
+  "snapshotVersionSource": "package.json#version",
+  "snapshotVersion": "0.7.0",
+  "translations": [
+    {
+      "path": "README.zh.md",
+      "canonicalPath": "README.md",
+      "snapshotVersion": "0.7.0",
+      "type": "release-scoped comprehension snapshot"
+    }
+  ],
+  "synchronizationRules": [
+    "English documents remain authoritative when a translation differs.",
+    "Before every release, compare README.zh.md with README.md and synchronize installation, configuration, compatibility, and current-use details.",
+    "Update both recorded snapshot versions from package.json and run the language-policy check; a release is incomplete until synchronization is confirmed.",
+    "Translate structural or operational README documents when useful; do not create translated copies of every detailed engineering document."
+  ],
+  "preservedLanguageData": [
+    "Localized application interfaces and locale dictionaries.",
+    "Original statutory holiday names, official-source titles, legal references, and citations.",
+    "Localized test fixtures, expected strings, and multilingual examples."
+  ]
+}

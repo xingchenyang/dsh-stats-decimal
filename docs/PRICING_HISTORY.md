@@ -1,72 +1,72 @@
-# DeepSeek API 价格历史档案
+# DeepSeek API Price History
 
-本文件记录 `lib/pricing.js` 内置价格区间的依据、时间精度和公告状态。它服务于历史会话计价，也将作为价格历史阶梯图的数据说明。
+This file records the evidence, timestamp precision, and announcement status for the price periods built into `lib/pricing.js`. It supports historical Session pricing and documents the data planned for a future price-history step chart.
 
-## 官方查询入口
+## Official references
 
-- [人民币价格表](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)
-- [美元价格表](https://api-docs.deepseek.com/quick_start/pricing/)
-- [中文更新日志](https://api-docs.deepseek.com/zh-cn/updates)
-- [英文更新日志](https://api-docs.deepseek.com/updates/)
-- [官网侧栏新闻目录](DEEPSEEK_NEWS_INDEX.md)
+- [CNY price table](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)
+- [USD price table](https://api-docs.deepseek.com/quick_start/pricing/)
+- [Chinese updates](https://api-docs.deepseek.com/zh-cn/updates)
+- [English updates](https://api-docs.deepseek.com/updates/)
+- [Official news index](DEEPSEEK_NEWS_INDEX.md)
 
-价格页面会被更新内容覆盖，因此不能单独承担历史存档。官网也没有单独的新闻汇总页面；维护价格区间时，应优先检查文档侧栏中的独立新闻正文和已有价格页快照。更新日志主要用于确认模型迭代顺序，只有明确写出价格或生效时间时才属于价格证据。无法获得精确时刻时必须保留日期精度标记。
+Price pages are updated in place and cannot serve as the only historical record. The official site has no single news index; when maintaining price periods, check independent news articles linked from the documentation sidebar and existing snapshots of the price pages. Update logs mainly confirm model release order and count as pricing evidence only when they explicitly state prices or effective times. Preserve date-level precision whenever an exact time is unavailable.
 
-## 更早的官方价格新闻
+## Earlier official pricing announcements
 
-以下节点已经从独立新闻正文确认，先收入 `PRICE_NOTICES`，供未来扩展完整的多年走势图；它们尚未自动扩展本插件当前支持的 V4 模型计费范围。
+The following price events were confirmed from individual news articles and stored in `PRICE_NOTICES` for a future multi-year chart. They have not extended the currently supported V4 model billing periods.
 
-| 日期 | 官方新闻中的价格信息 | 当前处理 |
-|---|---|---|
-| 2024-08-02 | 上下文硬盘缓存上线：CNY 缓存命中 0.1、未命中 1；USD 缓存命中 0.014、未命中 0.14 | 已存公告；仍需配齐对应模型输出价和生效边界后才能形成完整曲线 |
-| 2024-12-26 | V3 维持优惠价至北京时间 2025-02-09 00:00；之后 CNY 为 0.5 / 2 / 8，USD 为 0.07 / 0.27 / 1.10 | 已存公告及精确截止时间 |
-| 2025-01-20 | R1：CNY 1 / 4 / 16，USD 0.14 / 0.55 / 2.19 | 已存公告 |
-| 2025-08-21 | V3.1 新价格在北京时间 2025-09-06 00:00 生效，同时取消夜间优惠 | 已存公告及精确生效时间；完整旧优惠区间仍待整理 |
-| 2025-09-29 | V3.2-Exp API 即刻降价 50% 以上 | 已存日期精度公告；具体价格位于官方图片中，完成图片取证前不写入计费表 |
+| Date | Pricing information in the official article | Current handling |
+| --- | --- | --- |
+| 2024-08-02 | Context caching launched: CNY cache hit 0.1, miss 1; USD cache hit 0.014, miss 0.14 | Announcement recorded; corresponding model output rates and effective boundaries are still needed for a complete curve |
+| 2024-12-26 | V3 promotional prices continue until 2025-02-09 00:00 Beijing time; afterward CNY is 0.5 / 2 / 8 and USD is 0.07 / 0.27 / 1.10 | Announcement and exact end time recorded |
+| 2025-01-20 | R1: CNY 1 / 4 / 16 and USD 0.14 / 0.55 / 2.19 | Announcement recorded |
+| 2025-08-21 | V3.1 prices take effect at 2025-09-06 00:00 Beijing time, and the overnight discount ends | Announcement and exact effective time recorded; complete old promotional periods still need compilation |
+| 2025-09-29 | V3.2-Exp API prices cut by more than 50% immediately | Date-precision announcement recorded; exact prices appear in an official image and are excluded from the billing table until image evidence is captured |
 
-字段顺序仍为缓存命中 / 缓存未命中 / 输出。只有新闻明确提供了全部三项价格时才记录完整三元组。
+Rate order is cache hit / cache miss / output. Record a complete three-rate tuple only when the article explicitly provides all three prices.
 
-## 计费区间
+## Billing periods
 
-价格单位均为每百万 tokens，字段顺序为：缓存命中 / 缓存未命中 / 输出。时间均为北京时间（UTC+8）。
+Prices are per million tokens. Rate order is cache hit / cache miss / output. All times are Beijing time (UTC+8).
 
 ### DeepSeek V4 Flash
 
-| 生效时间 | CNY | USD | 说明 |
-|---|---|---|---|
-| 2026-04-24（日期精度） | 0.2 / 1 / 2 | 0.028 / 0.14 / 0.28 | V4 Preview 首发价 |
-| 2026-04-26（日期精度） | 0.02 / 1 / 2 | 0.0028 / 0.14 / 0.28 | 缓存命中价降至首发价的 1/10 |
-| 2026-08-17 00:00 | 空闲 0.05 / 1.5 / 4.5；高峰 0.10 / 3 / 9 | 空闲 0.007 / 0.22 / 0.66；高峰 0.014 / 0.44 / 1.32 | 正式启用峰谷价格 |
-| 2026-09-10 12:00 | 空闲 0.02 / 1 / 4；高峰 0.04 / 2 / 8 | 空闲 0.003 / 0.15 / 0.6；高峰 0.006 / 0.3 / 1.2 | 两个旧 Flash ID 路由至 V4.1 Flash |
+| Effective time | CNY | USD | Note |
+| --- | --- | --- | --- |
+| 2026-04-24 (date precision) | 0.2 / 1 / 2 | 0.028 / 0.14 / 0.28 | V4 Preview launch prices |
+| 2026-04-26 (date precision) | 0.02 / 1 / 2 | 0.0028 / 0.14 / 0.28 | Cache-hit price cut to one tenth of launch price |
+| 2026-08-17 00:00 | Off-peak 0.05 / 1.5 / 4.5; peak 0.10 / 3 / 9 | Off-peak 0.007 / 0.22 / 0.66; peak 0.014 / 0.44 / 1.32 | Peak/off-peak pricing begins |
+| 2026-09-10 12:00 | Off-peak 0.02 / 1 / 4; peak 0.04 / 2 / 8 | Off-peak 0.003 / 0.15 / 0.6; peak 0.006 / 0.3 / 1.2 | Two legacy Flash IDs route to V4.1 Flash |
 
-新模型名 `deepseek-flash` 从 2026-09-10 12:00 开始存在；更早的同名事件不使用其他模型价格兜底。
+The new model ID `deepseek-flash` exists from 2026-09-10 12:00. Earlier events with that ID do not fall back to another model's price.
 
 ### DeepSeek V4 Pro
 
-| 生效时间 | CNY | USD | 说明 |
-|---|---|---|---|
-| 2026-04-24（日期精度） | 1 / 12 / 24 | 0.145 / 1.74 / 3.48 | V4 Preview 首发价 |
-| 2026-04-25（日期精度） | 0.25 / 3 / 6 | 0.03625 / 0.435 / 0.87 | 75% 限时优惠 |
-| 2026-04-26（日期精度） | 0.025 / 3 / 6 | 0.003625 / 0.435 / 0.87 | 全系列缓存命中价再次降至 1/10 |
-| 2026-08-17 00:00 | 空闲 0.15 / 4.5 / 13.5；高峰 0.30 / 9 / 27 | 空闲 0.022 / 0.66 / 1.98；高峰 0.044 / 1.32 / 3.96 | 正式启用峰谷价格 |
+| Effective time | CNY | USD | Note |
+| --- | --- | --- | --- |
+| 2026-04-24 (date precision) | 1 / 12 / 24 | 0.145 / 1.74 / 3.48 | V4 Preview launch prices |
+| 2026-04-25 (date precision) | 0.25 / 3 / 6 | 0.03625 / 0.435 / 0.87 | 75% limited-time discount |
+| 2026-04-26 (date precision) | 0.025 / 3 / 6 | 0.003625 / 0.435 / 0.87 | Cache-hit prices cut again to one tenth across the series |
+| 2026-08-17 00:00 | Off-peak 0.15 / 4.5 / 13.5; peak 0.30 / 9 / 27 | Off-peak 0.022 / 0.66 / 1.98; peak 0.044 / 1.32 / 3.96 | Peak/off-peak pricing begins |
 
-2026-06-01 00:00，75% 优惠转为永久价格，但用户实际支付的数值没有变化，因此只记录公告，不建立重复价格区间。
+On 2026-06-01 00:00, the 75% discount became the permanent price, but the amount users paid did not change. The announcement is recorded without creating a duplicate price period.
 
 ### DeepSeek V4 Flash Vision Exp
 
-该模型于 2026-08-21 发布，当时与 V4 Flash 同价；2026-09-10 12:00 起兼容模型名路由至 V4.1 Flash 并使用新的 Flash 价格。发布前的同名事件视为费用未知。
+This model launched on 2026-08-21 at the same price as V4 Flash. From 2026-09-10 12:00, the compatible model name routes to V4.1 Flash and uses the updated Flash prices. Events with this model name before launch have unknown cost.
 
-## 被撤回的计划
+## Withdrawn plan
 
-V4.1 Flash 发布公告曾计划从 2026-09-14 12:00 起将 `deepseek-v4-pro` 路由至 V4.1 Flash。官方随后说明将在 9 月 14 日之后继续提供 V4 Pro API，计费方式保持不变。因此：
+The V4.1 Flash announcement initially planned to route `deepseek-v4-pro` to V4.1 Flash starting 2026-09-14 12:00. DeepSeek later stated that V4 Pro API would remain available after September 14 and its pricing would remain unchanged. Therefore:
 
-- 该计划在 `PRICE_NOTICES` 中标记为 `cancelled`；
-- 2026-09-14 不产生 Pro 价格断点；
-- 历史走势图可以把它显示为已撤回公告，但实际价格曲线保持连续。
+- The plan is marked `cancelled` in `PRICE_NOTICES`.
+- September 14, 2026 does not create a Pro pricing boundary.
+- A historical chart may show the withdrawn announcement, but the actual price curve remains continuous.
 
-## 时间精度
+## Timestamp precision
 
-- `instant`：官方提供精确生效时间，可以直接作为事件计价边界。
-- `date`：目前只能确认北京时间日期；实现以该日 00:00 作为确定性边界，但档案明确保留较低精度，避免将其误称为官方精确时刻。
+- `instant` means the official source provided an exact effective time that can be used directly as an event-pricing boundary.
+- `date` means only the Beijing calendar date is confirmed. The implementation uses midnight on that date as a deterministic boundary, while retaining the lower precision so it is not presented as an exact official time.
 
-如果以后取得更可靠的官方存档，应修正对应时间精度和边界，并提升 projection `stateVersion`，使历史会话重新折叠。
+If a more reliable official archive becomes available, update the precision and boundary, then increment projection `stateVersion` so historical sessions are refolded.

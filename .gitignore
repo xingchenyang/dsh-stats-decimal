@@ -7,6 +7,6 @@ node_modules/
 .env.*
 !.env.example
 
-# 本地分析与升级调查产物(下载并解包的 rc2 npm 源码、npm 临时缓存)
+# Local analysis and upgrade-investigation artifacts (downloaded/unpacked rc2 npm source and temporary npm cache).
 .upgrade-investigation/
 .npmcache/

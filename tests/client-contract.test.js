@@ -20,7 +20,7 @@ test("current-period calculation mirrors the fixed Beijing weekday and holiday r
 	assert.match(source, /timeEpochMs \+ 8 \* 60 \* 60 \* 1000/);
 	assert.match(source, /beijingDay === 0 \|\| beijingDay === 6/);
 	assert.match(source, /beijingDate <= span\.endDate/);
-	assert.match(source, /currentBand\(now, ledgerVal\.peakHours, ledgerVal\.publicHolidaySpans\)/);
+	assert.match(source, /currentPeriodStatus\(now, ledgerVal\.peakHours, ledgerVal\.publicHolidaySpans\)/);
 	assert.match(source, /peakHours\.includes\(beijingTime\.getUTCHours\(\)\)/);
 });
 
@@ -28,7 +28,7 @@ test("browser current-period logic honors Host-supplied holiday spans", () => {
 	let clientExports;
 	const instrumented = source.replace(
 		"\n\t\t// ---- plugin-owned locale templates ----",
-		"\n\t\texports.__currentBandForTest = currentBand;\n\t\t// ---- plugin-owned locale templates ----"
+		"\n\t\texports.__currentPeriodStatusForTest = currentPeriodStatus;\n\t\t// ---- plugin-owned locale templates ----"
 	);
 	assert.notEqual(instrumented, source, "test hook insertion point should exist");
 	vm.runInNewContext(instrumented, {
@@ -43,8 +43,8 @@ test("browser current-period logic honors Host-supplied holiday spans", () => {
 
 	const peakHours = [9, 10, 11, 14, 15, 16, 17];
 	const hostHolidaySpans = [{ startDate: "2026-09-25", endDate: "2026-09-27" }];
-	assert.equal(clientExports.__currentBandForTest(Date.UTC(2026, 8, 25, 1), peakHours, hostHolidaySpans), "valley");
-	assert.equal(clientExports.__currentBandForTest(Date.UTC(2026, 8, 28, 1), peakHours, hostHolidaySpans), "peak");
+	assert.equal(clientExports.__currentPeriodStatusForTest(Date.UTC(2026, 8, 25, 1), peakHours, hostHolidaySpans).band, "valley");
+	assert.equal(clientExports.__currentPeriodStatusForTest(Date.UTC(2026, 8, 28, 1), peakHours, hostHolidaySpans).band, "peak");
 });
 
 test("currency formatting truncates at display boundaries and handles defensive inputs", () => {

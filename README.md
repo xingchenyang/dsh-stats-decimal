@@ -4,159 +4,145 @@
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/license-MIT-2EA44F)](LICENSE)
 
-一个运行在 DeepSeek Harness Web 会话和 Desktop 内嵌 Web 界面中的 Cordis 插件。它保留 DSH 原生可展开统计，并追加 CNY/USD 消费、充值余额与当前计价时段。费用在 Host 侧按会话事件计算，余额通过 RPC 读取，API Key 不进入浏览器或 Session 日志。
+English | [中文](README.zh.md)
 
-## 特性
+This Cordis plugin runs in DeepSeek Harness Web sessions and the Desktop app's embedded Web interface. It preserves DSH's expandable native session statistics and adds estimated CNY/USD costs, recharge balances, and the current pricing period. Costs are calculated on the Host from session events. Balance requests use Host-side RPC, so the API key never enters the browser or Session log.
 
-- 保留 DSH 原生 `StatsPills` 的轮次、速度、精确 token 和缓存命中详情。
-- 独立显示消费/余额账本，不覆盖 DSH 原生 `stats` 项。
-- 支持 CNY/USD 累计消费、最后一个会话自然日的消费和充值余额。
-- 按事件发生时的历史价格、模型、缓存命中/未命中、输出 token 及北京时间峰谷时段估算费用。
-- 显示当前官方计价时段：`空闲时段 / 高峰时段`、`OFF-PEAK / PEAK`。
-- 周六、周日（包括调休上班的周末）和已编入日历的中国法定节假日固定按空闲时段；支持为已有或自定义模型覆盖完整价格表。
-- 未配置价格的模型显示 `费用未知 / Cost unknown`，不套用其他模型价格。
-- 费用和余额功能由配置开关控制，默认关闭。
+## Features
 
-## 文档
+- Keeps native `StatsPills` details for turns, speed, exact token counts, and cache hits.
+- Adds a separate cost and balance ledger without replacing DSH's native `stats` item.
+- Shows cumulative session cost, cost for the last calendar day in the session, and recharge balance in CNY and USD.
+- Replays each event using its historical model price, cache buckets, output tokens, and Beijing-time pricing period.
+- Shows the current Beijing date type and pricing period: weekday peak/off-peak, weekend off-peak, or a named statutory holiday. The interface displays localized holiday names.
+- Saturday, Sunday (including makeup workdays), and bundled Chinese statutory holidays always use off-peak prices. Complete custom prices can be supplied for built-in or additional models.
+- Models without a complete configured price show `Cost unknown` and never fall back to another model's price.
+- Cost and balance features are controlled by configuration and are disabled by default.
 
-- [CHANGELOG.md](CHANGELOG.md)：版本与用户可见变化。
-- [DEVELOPMENT.md](DEVELOPMENT.md)：架构、兼容性约束、测试与发布流程。
-- [docs/PRICING_HISTORY.md](docs/PRICING_HISTORY.md)：历史价格、公告状态与官方来源。
-- [docs/BILLING_CALENDAR.md](docs/BILLING_CALENDAR.md)：法定节假日计价规则、年度日历来源与维护方式。
-- [docs/DEEPSEEK_NEWS_INDEX.md](docs/DEEPSEEK_NEWS_INDEX.md)：从官网侧栏整理的中英文新闻入口。
-- [AGENTS.md](AGENTS.md)：自动化 Agent 和维护者必须遵守的仓库规则。
+## Documentation
 
-## 兼容性与结构
+- [CHANGELOG.md](CHANGELOG.md): Release history and user-visible changes.
+- [DEVELOPMENT.md](DEVELOPMENT.md): Architecture, compatibility, validation, and release workflow.
+- [AGENTS.md](AGENTS.md): Repository rules for maintainers and automation.
+- [docs/BILLING_CALENDAR.md](docs/BILLING_CALENDAR.md): Holiday billing rules and calendar sources.
+- [docs/PRICING_HISTORY.md](docs/PRICING_HISTORY.md): Historical rates and announcement evidence.
+- [docs/DEEPSEEK_NEWS_INDEX.md](docs/DEEPSEEK_NEWS_INDEX.md): Selected links from the official news sidebar.
 
-- 当前适配目标：DeepSeek Harness `v0.2.0-rc.1`。已在 Desktop GitHub 安装环境确认账户登录模式的充值余额可显示；更广泛的兼容性仍以已验证的源码 contract 为准。
-- 插件使用 projection、slot 和 RPC contract；不据此承诺其他 DSH 版本。
-- Desktop 使用同一 Web 界面，但插件和配置位于独立的 `desktop` profile。安装成功后仍需在该 profile 启用费用配置；详见下文。
-- 源码为 ESM JavaScript，依赖 `@deepseek-ai/schemastery` 和 `zod`。
+## Compatibility and code map
 
-```text
-lib/index.js             Host 插件、配置 schema、billingLedger projection、余额 RPC
-lib/client.js            Web 费用/时段状态、本地化和余额轮询
-lib/pricing.js           模型价格表、价格覆盖、费用计算和北京时间峰谷判断
-cordis.patch.yml         Cordis bundle 注册入口
-scripts/reload-plugin.mjs 删除并重新安装 file: 插件快照
-```
+- Current target: DeepSeek Harness `v0.2.0-rc.1`. Account-login balance display was confirmed in a Desktop GitHub installation. Broader compatibility claims remain limited to verified source contracts.
+- The plugin uses projection, slot, and RPC contracts; this does not imply compatibility with other DSH versions.
+- Desktop uses the same Web interface but has a separate `desktop` profile. Enable cost settings in that profile after installation.
+- The plugin is ESM JavaScript and depends on `@deepseek-ai/schemastery` and `zod`.
 
-## 显示内容
+~~~text
+lib/index.js             Host plugin, configuration schema, billing projection, balance RPC
+lib/client.js            Web ledger and pricing status, localization, and balance polling
+lib/pricing.js           Price tables, overrides, cost calculation, Beijing-time periods
+cordis.patch.yml         Cordis bundle registration
+scripts/reload-plugin.mjs Reinstalls the local file: plugin snapshot
+~~~
 
-DSH 原生统计保持不变；插件在输入框下方的统计带中追加独立费用行，排在原生统计 pills 和上下文圆环之后。费用行紧接原生行显示，不加背景装饰。金额按两位小数直接截断，不四舍五入。
+## Display
 
-费用账本示例：
+The native DSH statistics remain intact. The plugin adds a separate cost row below the composer, after the native statistics pills and context meter. The row has no background decoration. Amounts are truncated to two decimal places; they are never rounded.
 
-```text
-高峰时段  CNY 累计 ¥3.55 · 今日 ¥0.95 · 余额 ¥27.21 | USD 累计 $0.50 · 今日 $0.13 · 余额 $0.00
-PEAK  CNY Total ¥3.55 · Today ¥0.95 · Balance ¥27.21 | USD Total $0.50 · Today $0.13 · Balance $0.00
-```
+Example output:
 
-每个启用币种只出现一次；多币种用 `|` 分隔，单币种不显示分隔符。费用未知时显示 `费用未知 / Cost unknown`，不影响余额显示。
+~~~text
+National Day · OFF-PEAK  CNY Total ¥0.67 · Today ¥0.67 · Balance ¥9.20 | USD Total $0.10 · Today $0.10 · Balance $0.00
+国庆节 · 空闲时段  CNY 累计 ¥0.67 · 今日 ¥0.67 · 余额 ¥9.20 | USD 累计 $0.10 · 今日 $0.10 · 余额 $0.00
+~~~
 
-## 插件管理
+Each enabled currency appears once. Multiple currencies are separated by `|`; a single currency has no separator. Unknown pricing does not hide or change the balance.
 
-按运行环境选择对应的插件管理方式：Web profile 使用 CMD/PowerShell 命令行；Desktop profile 在 Desktop 主应用的「插件」页面管理，添加插件时使用「添加插件」功能。两个 profile 相互独立。
+## Installation and plugin management
 
-| 环境 | 插件管理方式 |
-|---|---|
-| Desktop | 「插件」页面；添加时使用「添加插件」功能 |
-| Web | CMD/PowerShell：`dsh plugin --profile web ...` |
+Choose the management method for the target profile. Use the Desktop app's Plugins page for the Desktop profile and the command line for the Web profile. The profiles are independent.
 
-### Desktop：使用「添加插件」功能
+| Environment | Management method |
+| --- | --- |
+| Desktop | Plugins page; use Add Plugin |
+| Web | CMD or PowerShell: `dsh plugin --profile web ...` |
 
-在 Desktop 主应用侧栏打开「插件」页面，点击「添加插件」，再输入 GitHub 仓库地址（推荐）：
+### Desktop
 
-```text
+In the Desktop app, open the Plugins page, choose Add Plugin, and enter the repository URL:
+
+~~~text
 https://github.com/xingchenyang/dsh-stats-decimal
-```
+~~~
 
-首次安装成功后点击「立即启用」，再重启 DSH Desktop，插件才会应用。GitHub 安装会由 Desktop profile 的 pnpm 安装插件声明的依赖，无需预先在本地源码目录安装依赖。未指定 Git ref 时，pnpm 使用默认分支的最新提交，并将解析到的 commit 写入 profile lockfile；GitHub Release 不参与选择。
+After installation, choose Enable Now and restart DSH Desktop. The Desktop profile's pnpm installs dependencies declared by the plugin. Unless a Git ref is specified, pnpm selects the latest commit on the default branch and records that commit in the profile lockfile. GitHub Releases do not select the installed commit.
 
-更新已通过 GitHub 安装的插件时，在「添加插件」中再次输入同一个仓库 URL 即可；不必先卸载插件或重装 DSH Desktop。更新后重启 Desktop，使新代码生效。
+To update a GitHub installation, enter the same repository URL in Add Plugin again, then restart Desktop. Uninstalling the plugin or reinstalling DSH Desktop is not required.
 
-**已知误报（DSH `v0.2.0-rc.1`）**：对已安装插件再次提交同一 GitHub URL 后，pnpm 可能正常结束并显示 `Already up to date`、`added 0`、`Done`，但插件页面随后提示“无法从依赖变更中确定安装了哪一个包”。本项目观察到此提示时插件版本已更新，重启后账户登录余额正常显示；在这种情况下，pnpm 结果和更新后的版本比该提示更能反映安装结果。若 pnpm 本身报错、重启后版本未变化或功能仍不可用，应按实际安装失败处理。
+**Known UI warning on DSH `v0.2.0-rc.1`:** after submitting the same URL for an installed plugin, pnpm may finish successfully with `Already up to date`, `added 0`, and `Done`, while the plugin page reports that it could not determine which package was installed from the dependency changes. In the observed case, the plugin version had updated and account-login balance worked after restart. In that situation, the pnpm result and installed version were more reliable indicators than the warning. Treat a pnpm error, unchanged version after restart, or unavailable feature as an installation failure.
 
-需要安装本地源码时，也可在同一「添加插件」功能中选择本地插件目录。此方式登记为 `link:`，不会替源码目录安装依赖；在仓库根目录先运行以下命令，再在「添加插件」表单中选择仓库根目录。该命令只准备源码依赖，不会向 DSH 安装插件：
+For a local source installation, select the repository directory in Add Plugin. This registers a `link:` package and does not install dependencies into the linked source directory. From the repository root, prepare the runtime dependencies first:
 
-```powershell
-Set-Location C:\PROJETS-PERSO\dsh-stats-decimal
+~~~powershell
 npm.cmd install --omit=dev --no-package-lock --ignore-scripts
-```
+~~~
 
-本地目录安装和配置都属于 Desktop profile。不要用 Web 命令行或 Web 重装脚本管理 Desktop profile。
+This command prepares source dependencies; it does not install the plugin into DSH. Local installation and configuration belong to the Desktop profile. Do not use Web CLI commands or the Web reload script to manage the Desktop profile.
 
-### Web：CMD / PowerShell 命令行
+### Web
 
-此处的 `dsh` 命令只管理 Web profile；Desktop profile 在 Desktop 应用的「插件」页面管理。
+The `dsh` command manages only the Web profile. The Desktop profile is managed by the Desktop app. The `dsh plugin` command uses pnpm, which must be on PATH. If pnpm is not installed, install it from CMD:
 
-`dsh plugin` 内部调用 pnpm；pnpm 必须在 PATH 中。若尚未安装 pnpm，在 CMD 中运行：
-
-```cmd
+~~~cmd
 npm install -g pnpm
-```
+~~~
 
-在 PowerShell 中运行：
+Or from PowerShell:
 
-```powershell
+~~~powershell
 npm.cmd install -g pnpm
-```
+~~~
 
-在 CMD 中从插件源码目录的上一级执行：
+From the directory that contains the cloned repository, add the plugin and start Web:
 
-```cmd
-cd /d C:\PROJETS-PERSO
+~~~cmd
 dsh plugin --profile web add file:./dsh-stats-decimal
 dsh web
-```
+~~~
 
-在 PowerShell 中执行相同的 Web profile 安装：
+The PowerShell commands are the same. The `file:./dsh-stats-decimal` path is resolved from the current shell directory, not the profile directory. The `add` command adds the plugin to the profile and to `dsh.profile.bundles`; no manual insert is needed. The public `dsh` CLI does not manage the official Desktop profile. See the [DSH Desktop guide](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.1/apps/desktop/README.zh.md).
 
-```powershell
-Set-Location C:\PROJETS-PERSO
+## Update and uninstall
+
+After changing a source installed with the Web CLI's `file:` method, reinstall it and restart DSH so the Web profile and Host reload the plugin. Run these commands from the directory containing the clone:
+
+~~~powershell
+dsh plugin --profile web remove dsh-stats-decimal
 dsh plugin --profile web add file:./dsh-stats-decimal
 dsh web
-```
+~~~
 
-`file:./dsh-stats-decimal` 从当前 shell 目录解析，不从 profile 目录解析。`add` 会把插件写入 profile 并自动加入 `dsh.profile.bundles`，无需手动 insert。此命令管理 Web profile；官方 Desktop profile 由 Desktop 应用独占，不能用公共 `dsh` CLI 管理，参见 [Desktop 中文说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.1/apps/desktop/README.zh.md)。
+The repository also includes a one-step reload script. Run it from the repository root:
 
-## 更新与卸载
+~~~powershell
+node scripts/reload-plugin.mjs                 # profile defaults to web
+node scripts/reload-plugin.mjs --profile web   # choose web explicitly
+node scripts/reload-plugin.mjs --dry-run       # print commands without changing anything
+~~~
 
-Web 通过 CLI 的 `file:` 方式安装后，修改源码时应重新安装并重启 DSH，让 Web profile 和 Host 重新加载插件：
+The script updates the profile dependency and `node_modules` only; it does not modify `cordis.patch.yml`. Restart `dsh web` and hard-refresh the page (Ctrl+F5) afterward. Calling the script with `node` avoids PowerShell's `.ps1` execution policy. The terminal must be able to write to `$DSH_HOME\profiles\web`.
 
-```powershell
-cd <插件源码目录的上一级>
+To uninstall from the Web profile:
+
+~~~powershell
 dsh plugin --profile web remove dsh-stats-decimal
-dsh plugin --profile web add    file:./dsh-stats-decimal
-dsh web
-```
+~~~
 
-推荐使用项目自带的一步脚本：
+If the profile's `cordis.patch.yml` still contains a `stats-decimal` entry, remove it as well. A leftover entry does not prevent a later reinstall. Manage the Desktop plugin only through the Desktop app's Plugins page.
 
-```powershell
-cd C:\PROJETS-PERSO\dsh-stats-decimal
-node scripts/reload-plugin.mjs                 # 默认 profile=web
-node scripts/reload-plugin.mjs --profile web   # 显式指定
-node scripts/reload-plugin.mjs --dry-run       # 只显示命令，不改动
-```
+## Configuration
 
-脚本只更新 profile 的依赖和 `node_modules`，不修改 `cordis.patch.yml`。执行后仍需重启 `dsh web` 并硬刷新（Ctrl+F5）。Windows 上直接用 `node` 调用脚本，不受 PowerShell `.ps1` 执行策略影响；终端需要能写入 `$DSH_HOME\profiles\web`。
+Desktop reads `$DSH_HOME\profiles\desktop\cordis.patch.yml`. Create the file if needed; its top level must be a YAML sequence. For Web CLI management, edit `$DSH_HOME\profiles\web\cordis.patch.yml`. Both profiles use the same settings:
 
-卸载：
-
-```powershell
-dsh plugin --profile web remove dsh-stats-decimal
-```
-
-如果 profile 的 `cordis.patch.yml` 仍有 `stats-decimal` 条目，建议一并删除；遗留条目不会影响重新安装。
-
-Desktop 插件通过 Desktop 的「插件」页面管理；首次安装和 GitHub 更新都使用「添加插件」功能，更新已安装插件时再次填写同一 URL，完成后重启 Desktop。Web 通过命令行和重装脚本管理。两种方式操作各自独立的 profile。
-
-## 配置
-
-Desktop 使用 `$DSH_HOME\profiles\desktop\cordis.patch.yml`；文件不存在时新建，顶层必须是 YAML 数组。通过 Web 命令行管理时，编辑独立的 `$DSH_HOME\profiles\web\cordis.patch.yml`。两个 profile 使用相同配置项：
-
-```yaml
+~~~yaml
 - id: stats-decimal
   name: 'dsh-stats-decimal'
   config:
@@ -167,47 +153,47 @@ Desktop 使用 `$DSH_HOME\profiles\desktop\cordis.patch.yml`；文件不存在�
     balance:
       enabled: true
       # apiBase: 'https://api.deepseek.com'
-```
+~~~
 
-改完后，Desktop 重启 Desktop；Web 重启 `dsh web` 并硬刷新（Ctrl+F5）。仅安装插件不会显示费用行，因为 `enableCost`、`cnyEnabled` 和 `usdEnabled` 默认都是 `false`；两个 profile 的配置互不继承。所有开关默认关闭：
+After editing the Desktop profile, restart Desktop. For Web, restart `dsh web` and hard-refresh (Ctrl+F5). Installation alone does not show the cost row because `enableCost`, `cnyEnabled`, and `usdEnabled` default to `false`. Profile settings are not shared.
 
-| 配置 | 默认值 | 作用 |
-|---|---:|---|
-| `enableCost` | `false` | 消费账本总开关 |
-| `cnyEnabled` | `false` | 显示 CNY 片段 |
-| `usdEnabled` | `false` | 显示 USD 片段 |
-| `balance.enabled` | `false` | 在消费片段中追加余额 |
-| `peakHours` | `[9,10,11,14,15,16,17]` | 北京时间工作日高峰钟点 |
+| Setting | Default | Purpose |
+| --- | ---: | --- |
+| `enableCost` | `false` | Master switch for the cost ledger |
+| `cnyEnabled` | `false` | Show the CNY segment |
+| `usdEnabled` | `false` | Show the USD segment |
+| `balance.enabled` | `false` | Add balance to each enabled currency segment |
+| `peakHours` | `[9,10,11,14,15,16,17]` | Beijing weekday peak hours |
 
-消费行只有在 `enableCost=true` 且至少启用一个币种时显示。每个币种显示“累计/Total · 今日/Today”；余额开关打开后再追加“余额/Balance”。
+The cost row appears only when `enableCost=true` and at least one currency is enabled. Each currency shows its cumulative and last-session-day amounts; the balance setting adds the recharge balance.
 
 ### `peakHours`
 
-填北京时间工作日的峰钟点（0–23）。例如北京峰时段为 9:00–12:00、14:00–18:00，则填写 `[9,10,11,14,15,16,17]`。计算使用固定 UTC+8，与宿主时区和冬夏令时无关；周六、周日（包括调休上班日）及已编入日历的中国法定节假日全天按谷价。当前内置 2026 年法定节假日；未内置年份继续按周末和 `peakHours` 判断工作日，不推测节假日。空数组表示全程谷价。
+List the Beijing weekday peak hours as integers from 0 to 23. For example, use `[9,10,11,14,15,16,17]` for 09:00–12:00 and 14:00–18:00 Beijing time. Calculation uses a fixed UTC+8 offset, independent of the Host time zone and daylight-saving time. Saturdays, Sundays (including makeup workdays), and bundled Chinese statutory holidays use off-peak prices all day. The calendar currently includes 2026 holidays. Unsupported years use weekend rules and `peakHours` for weekdays; holidays are not inferred. An empty list means off-peak all day.
 
-### 价格与模型
+### Prices and models
 
-官方价格与历史查询入口：
+Official price and history references:
 
-- [人民币（CNY）价格表](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)
-- [美元（USD）价格表](https://api-docs.deepseek.com/quick_start/pricing/)
-- [官网侧栏新闻目录](docs/DEEPSEEK_NEWS_INDEX.md)：部分独立新闻正文包含具体价格、优惠截止时间和调价生效时间。
-- [中文更新日志](https://api-docs.deepseek.com/zh-cn/updates) / [英文更新日志](https://api-docs.deepseek.com/updates/)：主要用于核对模型迭代顺序；只有明确出现价格内容时才作为价格证据。
+- [CNY price table](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)
+- [USD price table](https://api-docs.deepseek.com/quick_start/pricing/)
+- [DeepSeek news index](docs/DEEPSEEK_NEWS_INDEX.md): selected articles contain prices, promotion end dates, or effective times.
+- [Chinese updates](https://api-docs.deepseek.com/zh-cn/updates) and [English updates](https://api-docs.deepseek.com/updates/): mainly useful for checking model release order; use them as price evidence only when they state pricing information.
 
-内置价格表覆盖：
+The built-in price table covers:
 
 - `deepseek-flash`
 - `deepseek-v4-flash`
 - `deepseek-v4-pro`
-- `deepseek-v4-flash-vision-exp`（与 Flash 同价）
+- `deepseek-v4-flash-vision-exp` (same price as Flash)
 
-两个旧 Flash 名称仍可调用，但由 DeepSeek-V4.1-Flash 提供服务并按当前 Flash 价格计费，因此三个 Flash ID 的当前价格相同。重放旧会话时，插件会根据每条消息的发生时间选择当时已经生效的价格；模型尚未发布或价格资料不完整的时间段显示费用未知，不用当前价格倒推。
+The two older Flash names remain callable, but DeepSeek-V4.1-Flash serves them at the current Flash price; all three Flash IDs therefore share the same current price. Historical session events use the price effective at each message timestamp. If a model had not yet launched or the historical price record is incomplete, its cost is unknown; current prices are not applied retroactively.
 
-内置历史价格及公告依据见 [价格历史档案](docs/PRICING_HISTORY.md)。其中 2026 年 9 月 14 日将 Pro 路由至 Flash 的原计划已经撤回，不构成计费断点；`deepseek-v4-pro` 继续按 Pro 价格计费。
+See the [price history](docs/PRICING_HISTORY.md) for historical rates and announcement evidence. The plan to route Pro to Flash on 2026-09-14 was withdrawn and did not create a billing boundary; `deepseek-v4-pro` continues to use the Pro price.
 
-将以下内容放在前例的 `config` 下；`overridePricing` 可覆盖已有模型或添加其他模型：
+Place `overridePricing` under the earlier `config` key to override a built-in model or add another model:
 
-```yaml
+~~~yaml
 overridePricing:
   my-model:
     cny:
@@ -216,25 +202,24 @@ overridePricing:
     usd:
       peak: { cacheHit: 0.006, cacheMiss: 0.3, output: 1.2 }
       valley: { cacheHit: 0.003, cacheMiss: 0.15, output: 0.6 }
-```
+~~~
 
-每个启用币种都必须有 `peak` 和 `valley` 下的 `cacheHit`、`cacheMiss`、`output` 三项价格，否则该模型费用显示未知。
+For every enabled currency, provide `cacheHit`, `cacheMiss`, and `output` prices for both `peak` and `valley`. Otherwise the model's cost is unknown.
 
-### 余额
+### Balance
 
-- Host 通过 DSH credentials service 解析 `DEEPSEEK_API_KEY`，再调用 DeepSeek API 查询余额；凭据存储格式由 DSH 管理，本插件不直接读取凭据文件。
-- 未配置 API Key 时，如果 DSH 提供 `deepseekAccount` 服务，则通过其登录态读取账户充值余额；不需要把账户 token 或 `apiKey` 配进本插件。
-- API Key 与账户登录同时可用时，API Key 路径优先。账户登录路径读取充值钱包，不包含赠送钱包。
-- API Key 只在 Host 侧解析和使用，不进入浏览器、projection 或 Session 日志。
-- 页面加载时读取一次，之后每 5 分钟轮询；刷新页面即可手动刷新。
-- 没有可用凭据、请求失败或该币种没有充值余额时显示 `余额 – / Balance –`。
+- The Host resolves `DEEPSEEK_API_KEY` through the DSH credentials service, then calls the DeepSeek balance API. DSH owns the credential storage format; the plugin does not read credential files.
+- When no API key is configured, the plugin can use DSH's optional `deepseekAccount` service to read the logged-in account's recharge balance. Do not configure an account token or `apiKey` in the plugin.
+- The API-key route takes priority when both API key and account login are available. The account-login route reports the recharge wallet only, not the promotional wallet.
+- The API key is resolved and used only on the Host; it is not sent to the browser, projection, or Session log.
+- Balance is read on page load and polled every five minutes. Refresh the page to request it manually.
+- If credentials are unavailable, a request fails, or a currency has no recharge balance, the display shows `Balance –`.
 
-## 注意事项
+## Notes and license
 
-- “今日”按会话日志中最后一个自然日统计；打开较早的历史会话时，它不一定代表现实中的今天。
-- 费用是基于本地 token 统计和价格表的估算，最终金额以 DeepSeek 官方账单为准。
-- 余额是官方 API 的独立数据；模型价格未知不会隐藏或改变 DeepSeek API 返回的余额。
+- “Today” means the last calendar day present in the Session log. When an older Session is opened, it may not mean today's real-world date.
+- Costs are estimates based on local token usage and the price table. The final amount is determined by DeepSeek's official bill.
+- Balance is independent official API data. Unknown model pricing does not hide or change the balance returned by DeepSeek.
+- This independent personal project is not affiliated with or endorsed by DeepSeek, DeepSeek Harness, or OpenAI. Some implementation and documentation used AI assistance. The project is distributed under the [MIT License](LICENSE).
 
-## 项目边界与 License
-
-这是一个独立的个人项目，与 DeepSeek、DeepSeek Harness 或 OpenAI 官方没有隶属、合作或背书关系。部分实现和文档使用 AI 辅助开发。项目按 [MIT License](LICENSE) 发布。
+The package version and Chinese snapshot synchronization status are recorded in the [localization manifest](docs/localization-manifest.json).

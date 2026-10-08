@@ -71,7 +71,7 @@ function newsFromSidebar(sidebar) {
 
 function firstNewsPath(html) {
 	const href = /href=["'](\/(?:zh-cn\/)?news\/[^"'#?]+)["']/i.exec(html)?.[1];
-	if (!href) throw new Error("首页源码中没有找到新闻入口");
+	if (!href) throw new Error("Could not find a News link in the home page source");
 	return href.replace(/^\/zh-cn/, "").replace(/\/$/, "");
 }
 
@@ -131,7 +131,7 @@ function compare(current, baseline) {
 		if (!afterKeys.has(entryKey(item))) sidebarChanges.push({ kind: "removed", ...item });
 	}
 	if (before.map(entryKey).join("\n") !== after.map(entryKey).join("\n")) {
-		sidebarChanges.push({ kind: "reordered", href: "", title: "侧栏顺序发生变化" });
+		sidebarChanges.push({ kind: "reordered", href: "", title: "Sidebar order changed" });
 	}
 	return { addedNews, removedNews, sidebarChanges };
 }
@@ -139,13 +139,13 @@ function compare(current, baseline) {
 function printReport(result, baseline) {
 	console.log(`[deepseek-docs] baseline=${baseline.checkedAt}`);
 	if (!result.addedNews.length && !result.removedNews.length && !result.sidebarChanges.length) {
-		console.log("[deepseek-docs] 未发现英文 canonical 侧栏目录变化。");
+		console.log("[deepseek-docs] No changes found in the English canonical sidebar.");
 		return false;
 	}
-	for (const item of result.addedNews) console.log(`[deepseek-docs] 新增新闻 ${item.path}  ${item.titleZhCN ?? item.titleEn ?? ""}`);
-	for (const item of result.removedNews) console.log(`[deepseek-docs] 移除新闻 ${item.path}  ${item.titleZhCN ?? item.titleEn ?? ""}`);
-	for (const item of result.sidebarChanges) console.log(`[deepseek-docs] 侧栏${item.kind}  ${item.href}  ${item.title}`);
-	console.log("[deepseek-docs] 请打开相关新增页面，人工核对价格、实际生效时间及公告是否被撤回；脚本不会读取正文或修改计费表。");
+	for (const item of result.addedNews) console.log(`[deepseek-docs] Added news ${item.path}  ${item.titleEn ?? ""}`);
+	for (const item of result.removedNews) console.log(`[deepseek-docs] Removed news ${item.path}  ${item.titleEn ?? ""}`);
+	for (const item of result.sidebarChanges) console.log(`[deepseek-docs] Sidebar ${item.kind}  ${item.href}  ${item.title}`);
+	console.log("[deepseek-docs] Open relevant new pages and manually verify prices, effective times, and withdrawn announcements; this script does not read article bodies or change the price table.");
 	return true;
 }
 
@@ -158,6 +158,6 @@ try {
 		if (printReport(compare(current, baseline), baseline)) process.exitCode = 2;
 	}
 } catch (error) {
-	console.error(`[deepseek-docs] 检查失败：${error instanceof Error ? error.message : String(error)}`);
+	console.error(`[deepseek-docs] Check failed: ${error instanceof Error ? error.message : String(error)}`);
 	process.exitCode = 1;
 }

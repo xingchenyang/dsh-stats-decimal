@@ -125,13 +125,13 @@ test("Beijing holiday lookup uses UTC epoch boundaries and falls back outside bu
 
 test("browser calendar payload contains the seven complete official 2026 holiday spans", () => {
 	assert.deepEqual(holidaySpansForClient(), [
-		{ startDate: "2026-01-01", endDate: "2026-01-03" },
-		{ startDate: "2026-02-15", endDate: "2026-02-23" },
-		{ startDate: "2026-04-04", endDate: "2026-04-06" },
-		{ startDate: "2026-05-01", endDate: "2026-05-05" },
-		{ startDate: "2026-06-19", endDate: "2026-06-21" },
-		{ startDate: "2026-09-25", endDate: "2026-09-27" },
-		{ startDate: "2026-10-01", endDate: "2026-10-07" }
+		{ startDate: "2026-01-01", endDate: "2026-01-03", name: "元旦", nameEn: "New Year's Day" },
+		{ startDate: "2026-02-15", endDate: "2026-02-23", name: "春节", nameEn: "Spring Festival" },
+		{ startDate: "2026-04-04", endDate: "2026-04-06", name: "清明节", nameEn: "Qingming Festival" },
+		{ startDate: "2026-05-01", endDate: "2026-05-05", name: "劳动节", nameEn: "Labour Day" },
+		{ startDate: "2026-06-19", endDate: "2026-06-21", name: "端午节", nameEn: "Dragon Boat Festival" },
+		{ startDate: "2026-09-25", endDate: "2026-09-27", name: "中秋节", nameEn: "Mid-Autumn Festival" },
+		{ startDate: "2026-10-01", endDate: "2026-10-07", name: "国庆节", nameEn: "National Day" }
 	]);
 	assert.equal(holidaySpansForClient().some(({ startDate, endDate }) => startDate <= "2026-09-20" && "2026-09-20" <= endDate), false);
 	assert.equal(holidaySpansForClient().some(({ startDate, endDate }) => startDate <= "2026-10-10" && "2026-10-10" <= endDate), false);
