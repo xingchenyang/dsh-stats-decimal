@@ -4,6 +4,19 @@ This file records user-visible changes. For development context and technical de
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-10-09
+
+### Added
+
+- Added a second billing line with the current Beijing day's estimated cost across live and persisted sessions in the current DSH profile, including subagents and excluding fork-inherited events.
+- Added optional per-model `cacheWrite` prices for usage records that report cache-write tokens.
+
+### Changed
+
+- A positive cache-write token count without an explicit applicable cache-write price now makes that cost unknown instead of silently using the cache-hit price.
+- Show a localized loading status while the all-session daily estimate is calculated; read session logs in bounded batches while preserving deterministic pricing order.
+- Bumped the billing projection state version to `7` so existing sessions are refolded under the updated cache-write pricing rule.
+
 ## [0.7.0] - 2026-10-01
 
 ### Added

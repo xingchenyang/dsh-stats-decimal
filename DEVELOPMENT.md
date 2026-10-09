@@ -8,7 +8,7 @@ This guide records technical context, key decisions, and handoff information. In
 - Desktop loads the full Web application through Electron but has its own `$DSH_HOME/profiles/desktop`, plugin package-manager state, and bundled pnpm, isolated from the Web profile. `dsh.client.platform: "web"` applies to the embedded Web interface. Manage Web plugins with `dsh plugin --profile web`; manage Desktop plugins from the app's Plugins page and configure the Desktop profile separately.
 - Upstream reference: [DSH v0.2.0-rc.1 release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.0-rc.1) (commit `4878cda`).
 - Stack: ESM JavaScript, Cordis Host/Web bundles, `@deepseek-ai/schemastery`, and `zod`.
-- The client-visible billing projection version is `stateVersion: 6`. Version 5 added statutory-holiday date spans; version 6 added Chinese and English holiday names for weekday, weekend, and named-holiday status labels.
+- The billing projection version is `stateVersion: 7`. Version 5 added statutory-holiday date spans; version 6 added localized holiday names; version 7 changes how reported cache-write usage is priced and refolds prior sessions.
 - For a GitHub installation, Desktop's profile package manager installs the dependencies declared by the plugin. Restart Desktop after installing or updating. To update an installed GitHub plugin, submit the same URL again through Add Plugin.
 - A Desktop local-directory installation is recorded as `link:` and does not install dependencies into the linked directory. Install the declared runtime dependencies in the repository before using this development path. The public `dsh` CLI does not manage the Desktop profile.
 
@@ -19,13 +19,14 @@ This guide records technical context, key decisions, and handoff information. In
 3. The projection's `wire.viewSchema` sends cumulative and last-day cost, enabled currencies, pricing settings, and holiday spans with Chinese and English names to the Web client.
 4. The Web client preserves DSH's native `StatsPills` and registers a separate billing item in `conversation.composer.dock`. `ContextMeter` is a later sibling of the dock slot. When billing is enabled, the client permits the shared footer to wrap and uses flex order to place billing below both native statistics items as a separate second row. The row gap is 4 px and the billing row has no background decoration.
 5. Balance uses DSH Connection's shared exact-match `/api` route. The Host first resolves `DEEPSEEK_API_KEY` through DSH credentials and calls DeepSeek `/user/balance`. Without an API key, it can query the optional `deepseekAccount` Host service through `getBalance(AccountClientMetadata)`. DSH's provider owns account tokens and Platform request headers; credentials do not reach the browser.
+6. The all-session daily estimate uses DSH `sessionQuery.listSessions()` and `readSession()` on the Host. It prices only the current Beijing date, counts each session's owned events (skipping fork-inherited prefixes), and returns only the date, totals, and count through the authenticated `/api` route. Raw session events and message content stay on the Host. Reads run in batches of four and are folded in deterministic session/event order. The client shows a loading status, results are cached for one minute, and the client refreshes them every five minutes.
 
 Balance is not written to the Session. Session logs reject unknown event types, and the projection already provides the session totals; the plugin therefore does not append custom balance events.
 
 ## Code map
 
-- `lib/index.js`: Host plugin, configuration schema, `billingLedger` projection, balance RPC, and DSH credentials service call.
-- `lib/client.js`: Web cost and period status, localization, and balance polling.
+- `lib/index.js`: Host plugin, configuration schema, `billingLedger` projection, session-query aggregation, balance RPC, and DSH credentials service call.
+- `lib/client.js`: Web session cost and all-session daily total, period status, localization, and balance polling.
 - `lib/pricing.js`: Historical price periods, announcement archive, price overrides, cost calculation, and Beijing-time peak/off-peak classification.
 - `lib/billing-calendar/index.js`: The single program entry point for annual statutory-holiday data and Host date queries. `2026.js` contains the complete 2026 official holiday spans.
 - `docs/BILLING_CALENDAR.md`: Holiday-pricing evidence, calendar sources, missing-year fallback, and annual maintenance.
@@ -44,7 +45,7 @@ Balance is not written to the Session. Session logs reject unknown event types, 
 ### DSH projection contract
 
 - Internal state includes `cumulative`, `today`, `todayStamp`, and `pricingKnown`.
-- The client view includes `enabled`, `currencies`, `peakHours`, `publicHolidaySpans` with localized names, `cumulative`, `today`, and `pricingKnown`. It does not expose internal `todayStamp` or calendar-source metadata.
+- The client view includes `enabled`, `currencies`, `peakHours`, `publicHolidaySpans` with localized names, `cumulative`, `today`, and `pricingKnown`. It does not expose internal `todayStamp` or calendar-source metadata. The all-session total is served separately through authenticated RPC, not added to this per-session projection.
 - The DSH contract uses `wire.viewSchema` to provide projection data to the client. Without `wire`, `useProjection("billingLedger")` receives no renderable data.
 - If the projection state or wire view changes, update the state schema, wire view schema, client consumer, and `stateVersion` together.
 - `todayStamp` clears last-day cost before folding events from another calendar day, preventing values from different days from being mixed.
@@ -59,8 +60,8 @@ Balance is not written to the Session. Session logs reject unknown event types, 
 - A price override applies to the specified model's entire history, suitable for private proxies or custom contracts. Other built-in models continue to use official historical periods.
 - Percentages, abbreviated token counts, and amounts are truncated, never rounded.
 - Beijing time uses a fixed UTC+8 offset independent of the Host time zone or daylight-saving time. Saturdays and Sundays always use off-peak pricing, including weekend makeup workdays. Statutory holidays in bundled annual calendars also use off-peak pricing all day. Unsupported years retain weekend rules and the configured weekday `peakHours` fallback.
-- `cacheReadTokens` and `cacheWriteTokens` use the cache-hit price, uncached input uses the cache-miss price, and output uses the output price.
-- A model must have complete peak/off-peak and CNY/USD cache-hit, cache-miss, and output prices for each enabled currency to be priced.
+- `cacheReadTokens` use the cache-hit price, uncached input uses the cache-miss price, and output uses the output price. Cache writes use an optional, explicit per-model `cacheWrite` price. If a message reports positive cache-write usage without an applicable price, that cost is unknown; a missing or zero cache-write count needs no cache-write price.
+- A model must have complete peak/off-peak and CNY/USD cache-hit, cache-miss, and output prices for each enabled currency to be priced. `cacheWrite` is optional unless usage reports a positive cache-write count.
 - Unknown models and incomplete prices return `null`; the projection sets `pricingKnown` to `false` and does not fall back to another model's price.
 - Vision pricing must remain equal to Flash pricing where the official table specifies that relationship. Add a built-in model only when all required prices have evidence.
 
@@ -84,6 +85,7 @@ Balance is not written to the Session. Session logs reject unknown event types, 
 ## Known limitations
 
 - “Today” is the total for the last calendar day in the Session log. When an older Session is opened, it may not be today's real-world date.
+- The all-session daily estimate is for the current Beijing calendar day in the current DSH profile. It reads live and persisted sessions through `sessionQuery`; unreadable session history or a missing query service makes the total unavailable. It includes subagent sessions, excludes fork-inherited events, and is a local-log estimate rather than an official account bill.
 - Costs are local estimates; the final amount is determined by DeepSeek's official bill.
 - Balance requires either the `DEEPSEEK_API_KEY` credential and the DeepSeek `/user/balance` response format, or DSH's `deepseekAccount.getBalance()` service and its Platform wallet structure. The API-key path has priority; account login is used only when no API key is configured.
 - A Desktop local-directory installation links the repository but does not install its dependencies. Before using this development path, run `npm install --omit=dev --no-package-lock --ignore-scripts` from the repository root. A Desktop GitHub installation uses the profile's pnpm to install declared dependencies and requires a Desktop restart. After installation, check that the Desktop profile's `cordis.patch.yml` enables costs and currencies; they are off by default.
@@ -109,11 +111,12 @@ For pricing changes, also verify:
 - The three Flash IDs have identical built-in prices.
 - `costOf()` returns `null` for unknown models.
 - A complete model added with `overridePricing` is priced.
+- Cache-write usage is ignored when absent or zero, priced only from an explicit applicable `cacheWrite` rate, and unknown when positive usage has no rate.
 - Custom CNY/USD prices, independent balance failures, and unknown-pricing display still meet their contracts.
 
-For an installation check, run `node scripts/reload-plugin.mjs --profile web`, start `dsh web`, and hard-refresh the page. Check native StatsPills, the separate billing row, cumulative and last-day cost, unknown pricing, balance display, date type, pricing period, and layout.
+For an installation check, run `node scripts/reload-plugin.mjs --profile web`, start `dsh web`, and hard-refresh the page. Check native StatsPills, the two-line billing readout, cumulative and last-day cost, all-session current-day total (including a forked child without double-counting inherited usage), unavailable/unknown aggregate states, balance display, date type, pricing period, and layout.
 
-A Desktop manual check must install through the Desktop app's Add Plugin flow into its separate `desktop` profile, enable cost and currency settings in `$DSH_HOME/profiles/desktop/cordis.patch.yml`, and restart Desktop. Check native StatsPills, the billing row, and balance display. Do not manage the reserved Desktop profile through the CLI or Web reload script.
+A Desktop manual check must install through the Desktop app's Add Plugin flow into its separate `desktop` profile, enable cost and currency settings in `$DSH_HOME/profiles/desktop/cordis.patch.yml`, and restart Desktop. Check native StatsPills, the two-line billing readout, all-session current-day total, and balance display. Do not manage the reserved Desktop profile through the CLI or Web reload script.
 
 ## Follow-up
 

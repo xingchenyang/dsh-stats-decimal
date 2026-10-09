@@ -137,16 +137,22 @@ test("browser calendar payload contains the seven complete official 2026 holiday
 	assert.equal(holidaySpansForClient().some(({ startDate, endDate }) => startDate <= "2026-10-10" && "2026-10-10" <= endDate), false);
 });
 
-test("costOf uses cache hit, cache miss, and output buckets for both currencies", () => {
+test("costOf uses an explicit optional cache-write rate with the other buckets", () => {
 	const usage = {
 		uncachedInputTokens: 1_000_000,
 		cacheReadTokens: 500_000,
 		cacheWriteTokens: 500_000,
 		outputTokens: 1_000_000
 	};
-	assert.deepEqual(costOf(usage, "deepseek-flash", "peak", ["CNY", "USD"]), {
-		CNY: 10.04,
-		USD: 1.506
+	const custom = mergePricing({
+		"deepseek-flash": {
+			cny: { peak: { cacheWrite: 0.01 } },
+			usd: { peak: { cacheWrite: 0.001 } }
+		}
+	});
+	assert.deepEqual(costOf(usage, "deepseek-flash", "peak", ["CNY", "USD"], custom), {
+		CNY: 10.025,
+		USD: 1.5035
 	});
 });
 

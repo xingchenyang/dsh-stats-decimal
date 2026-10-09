@@ -46,11 +46,11 @@ function loadHostApplyFromSource() {
 }
 
 function makeBalanceRoute({ credentials, account, logs = [] } = {}) {
-	let route;
+	const routes = [];
 	const connection = {
 		fetch: {
 			register(options) {
-				route = options;
+			routes.push(options);
 				return () => {};
 			}
 		}
@@ -80,6 +80,7 @@ function makeBalanceRoute({ credentials, account, logs = [] } = {}) {
 		usdEnabled: true,
 		balance: { enabled: true }
 	});
+	const route = routes.find((candidate) => candidate.path === "/api/stats-decimal/getBalance");
 	assert.ok(route, "Host registers the shared /api balance route");
 	assert.equal(route.path, "/api/stats-decimal/getBalance");
 	assert.deepEqual(Array.from(route.methods), ["POST"]);
@@ -121,7 +122,7 @@ test("projection exposes period configuration and invalidates old cached prices"
 	assert.match(source, /peakHours: \[\.\.\.peakHours\]/);
 	assert.match(source, /publicHolidaySpans: holidaySpansForClient\(\)/);
 	assert.match(source, /publicHolidaySpans: zod\.array/);
-	assert.match(source, /stateVersion: 6/);
+	assert.match(source, /stateVersion: 7/);
 	assert.match(source, /costOf\(buckets, model, band, currencies, table, timeEpochMs\)/);
 	assert.match(source, /const band = bandForTime\(event\.time, peakHours\);/);
 	assert.match(source, /const next = foldUsage\(base, buckets, model, band, activeCurrencies, table, true, event\.time\);/);

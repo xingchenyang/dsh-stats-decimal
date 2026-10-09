@@ -13,6 +13,7 @@ This Cordis plugin runs in DeepSeek Harness Web sessions and the Desktop app's e
 - Keeps native `StatsPills` details for turns, speed, exact token counts, and cache hits.
 - Adds a separate cost and balance ledger without replacing DSH's native `stats` item.
 - Shows cumulative session cost, cost for the last calendar day in the session, and recharge balance in CNY and USD.
+- Shows a second-line estimate for the current Beijing day's usage across sessions in the current DSH profile, including subagent sessions.
 - Replays each event using its historical model price, cache buckets, output tokens, and Beijing-time pricing period.
 - Shows the current Beijing date type and pricing period: weekday peak/off-peak, weekend off-peak, or a named statutory holiday. The interface displays localized holiday names.
 - Saturday, Sunday (including makeup workdays), and bundled Chinese statutory holidays always use off-peak prices. Complete custom prices can be supplied for built-in or additional models.
@@ -36,8 +37,8 @@ This Cordis plugin runs in DeepSeek Harness Web sessions and the Desktop app's e
 - The plugin is ESM JavaScript and depends on `@deepseek-ai/schemastery` and `zod`.
 
 ~~~text
-lib/index.js             Host plugin, configuration schema, billing projection, balance RPC
-lib/client.js            Web ledger and pricing status, localization, and balance polling
+lib/index.js             Host plugin, billing projection, session aggregation, and RPC routes
+lib/client.js            Web ledger, all-session daily estimate, localization, and balance polling
 lib/pricing.js           Price tables, overrides, cost calculation, Beijing-time periods
 cordis.patch.yml         Cordis bundle registration
 scripts/reload-plugin.mjs Reinstalls the local file: plugin snapshot
@@ -45,13 +46,14 @@ scripts/reload-plugin.mjs Reinstalls the local file: plugin snapshot
 
 ## Display
 
-The native DSH statistics remain intact. The plugin adds a separate cost row below the composer, after the native statistics pills and context meter. The row has no background decoration. Amounts are truncated to two decimal places; they are never rounded.
+The native DSH statistics remain intact. The plugin adds a separate cost readout below the composer, after the native statistics pills and context meter. Its first line shows the open session's ledger and its second line shows the current Beijing day's total across sessions in the current DSH profile. The readout has no background decoration. Amounts are truncated to two decimal places; they are never rounded.
 
 Example output:
 
 ~~~text
-National Day · OFF-PEAK  CNY Total ¥0.67 · Today ¥0.67 · Balance ¥9.20 | USD Total $0.10 · Today $0.10 · Balance $0.00
-国庆节 · 空闲时段  CNY 累计 ¥0.67 · 今日 ¥0.67 · 余额 ¥9.20 | USD 累计 $0.10 · 今日 $0.10 · 余额 $0.00
+Weekday · PEAK  CNY Total ¥0.57 · Today ¥0.57 · Balance ¥89.54 | USD Total $0.08 · Today $0.08 · Balance $0.00
+工作日 · 高峰时段  CNY 累计 ¥0.57 · 今日 ¥0.57 · 余额 ¥89.54 | USD 累计 $0.08 · 今日 $0.08 · 余额 $0.00
+Beijing 2026-10-09 · Local sessions today CNY ¥9.22 | USD $1.38 · 25 sessions
 ~~~
 
 Each enabled currency appears once. Multiple currencies are separated by `|`; a single currency has no separator. Unknown pricing does not hide or change the balance.
@@ -167,6 +169,8 @@ After editing the Desktop profile, restart Desktop. For Web, restart `dsh web` a
 
 The cost row appears only when `enableCost=true` and at least one currency is enabled. Each currency shows its cumulative and last-session-day amounts; the balance setting adds the recharge balance.
 
+The all-session daily estimate reads live and persisted Session logs through DSH's `sessionQuery` service on page load and refreshes every five minutes. It includes each session's owned events, including subagent sessions, and excludes fork-inherited events to avoid counting them twice. If the service is unavailable or any log cannot be read, the line reports that the total is unavailable. If any current-day event has unknown pricing, it reports `Cost unknown`. The estimate covers logs in the current DSH profile and is not an official account bill; Web and Desktop profiles have separate session stores.
+
 ### `peakHours`
 
 List the Beijing weekday peak hours as integers from 0 to 23. For example, use `[9,10,11,14,15,16,17]` for 09:00–12:00 and 14:00–18:00 Beijing time. Calculation uses a fixed UTC+8 offset, independent of the Host time zone and daylight-saving time. Saturdays, Sundays (including makeup workdays), and bundled Chinese statutory holidays use off-peak prices all day. The calendar currently includes 2026 holidays. Unsupported years use weekend rules and `peakHours` for weekdays; holidays are not inferred. An empty list means off-peak all day.
@@ -204,7 +208,7 @@ overridePricing:
       valley: { cacheHit: 0.003, cacheMiss: 0.15, output: 0.6 }
 ~~~
 
-For every enabled currency, provide `cacheHit`, `cacheMiss`, and `output` prices for both `peak` and `valley`. Otherwise the model's cost is unknown.
+For every enabled currency, provide `cacheHit`, `cacheMiss`, and `output` prices for both `peak` and `valley`. Otherwise the model's cost is unknown. `cacheWrite` is an optional per-1M-token price for models that report cache-write usage. Add it only when the model's billing terms define that price; if a message reports cache writes and the applicable price is missing, its cost is unknown. Models that do not report cache writes need no `cacheWrite` setting.
 
 ### Balance
 
@@ -218,6 +222,7 @@ For every enabled currency, provide `cacheHit`, `cacheMiss`, and `output` prices
 ## Notes and license
 
 - “Today” means the last calendar day present in the Session log. When an older Session is opened, it may not mean today's real-world date.
+- The all-session daily estimate is dated with the current Beijing calendar day and covers only sessions available through the current DSH profile's `sessionQuery` service.
 - Costs are estimates based on local token usage and the price table. The final amount is determined by DeepSeek's official bill.
 - Balance is independent official API data. Unknown model pricing does not hide or change the balance returned by DeepSeek.
 - This independent personal project is not affiliated with or endorsed by DeepSeek, DeepSeek Harness, or OpenAI. Some implementation and documentation used AI assistance. The project is distributed under the [MIT License](LICENSE).
