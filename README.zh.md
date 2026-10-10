@@ -1,6 +1,6 @@
 # dsh-stats-decimal
 
-[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.2.0--rc.1-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.0-rc.1)
+[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.2.0--rc.2-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.0-rc.2)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/license-MIT-2EA44F)](LICENSE)
 
@@ -33,7 +33,7 @@
 
 ## 兼容性与代码结构
 
-- 当前目标：DeepSeek Harness `v0.2.0-rc.1`。已在 Desktop GitHub 安装环境确认账户登录模式的余额可显示。更广泛的兼容性声明仍以已验证的源码 contract 为准。
+- 当前兼容目标：DeepSeek Harness `v0.2.0-rc.2`（插件 `0.8.1`）。
 - 插件使用 projection、slot 和 RPC contract；这不代表兼容其他 DSH 版本。
 - Desktop 使用同一 Web 界面，但拥有独立的 `desktop` profile。安装后需在该 profile 启用费用配置。
 - 插件使用 ESM JavaScript，依赖 `@deepseek-ai/schemastery` 和 `zod`。
@@ -112,7 +112,7 @@ dsh plugin --profile web add file:./dsh-stats-decimal
 dsh web
 ~~~
 
-PowerShell 命令相同。`file:./dsh-stats-decimal` 相对于当前 shell 目录解析，而不是相对于 profile 目录。`add` 会将插件写入 profile，并自动加入 `dsh.profile.bundles`，无需手动 insert。公共 `dsh` CLI 不管理官方 Desktop profile。参见 [DSH Desktop 指南](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.1/apps/desktop/README.zh.md)。
+PowerShell 命令相同。`file:./dsh-stats-decimal` 相对于当前 shell 目录解析，而不是相对于 profile 目录。`add` 会将插件写入 profile，并自动加入 `dsh.profile.bundles`，无需手动 insert。公共 `dsh` CLI 不管理官方 Desktop profile。参见 [DSH Desktop 指南](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/apps/desktop/README.zh.md)。
 
 ## 更新与卸载
 
@@ -171,7 +171,7 @@ Desktop 使用 `$DSH_HOME\profiles\desktop\cordis.patch.yml`。文件不存在�
 
 只有 `enableCost=true` 且至少启用一种币时才显示费用行。每种币显示累计金额和会话最后一个自然日的金额；启用余额后还会显示充值余额。
 
-全会话当日估算会在页面加载时通过 DSH 的 `sessionQuery` 服务读取当前 profile 中的实时和已持久化 Session 日志，并每五分钟刷新。它汇总每个 Session 自己产生的事件，包含子代理 Session，并排除 fork 继承的事件前缀以免重复计算。若查询服务不可用或任一日志无法读取，界面会显示统计暂不可用；若当天任一事件的价格未知，则显示费用未知。该估算只覆盖当前 DSH profile 的日志，不是官方账户账单；Web 和 Desktop profile 的会话存储互相独立。
+全会话当日估算会在页面加载、当前会话的当日费用变化或会话结束后，以及每五分钟兜底时通过 DSH 的 `sessionQuery` 服务读取当前 profile 中的实时和已持久化 Session 日志。短时间连续发生的用量和会话事件会合并刷新。它汇总每个 Session 自己产生的事件，包含子代理 Session，并排除 fork 继承的事件前缀以免重复计算。若查询服务不可用或任一日志无法读取，界面会显示统计暂不可用；若当天任一事件的价格未知，则显示费用未知。该估算只覆盖当前 DSH profile 的日志，不是官方账户账单；Web 和 Desktop profile 的会话存储互相独立。
 
 ### `peakHours`
 

@@ -4,6 +4,19 @@ This file records user-visible changes. For development context and technical de
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.8.1] - 2026-10-10
+
+### Changed
+
+- Set DeepSeek Harness `v0.2.0-rc.2` as the compatibility target.
+
+### Fixed
+
+- Refresh the all-session daily estimate after the open session's daily cost changes or a session closes, coalescing short event bursts instead of waiting for the five-minute fallback.
+- Use one shared client scheduler for balance, all-session daily cost, and period-label checks; check the period label on Beijing hour boundaries instead of every minute.
+
 ## [0.8.0] - 2026-10-09
 
 ### Added

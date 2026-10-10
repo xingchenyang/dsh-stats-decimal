@@ -1,6 +1,6 @@
 # dsh-stats-decimal
 
-[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.2.0--rc.1-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.0-rc.1)
+[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.2.0--rc.2-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.0-rc.2)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/license-MIT-2EA44F)](LICENSE)
 
@@ -31,7 +31,7 @@ This Cordis plugin runs in DeepSeek Harness Web sessions and the Desktop app's e
 
 ## Compatibility and code map
 
-- Current target: DeepSeek Harness `v0.2.0-rc.1`. Account-login balance display was confirmed in a Desktop GitHub installation. Broader compatibility claims remain limited to verified source contracts.
+- Current target: DeepSeek Harness `v0.2.0-rc.2` (plugin `0.8.1`).
 - The plugin uses projection, slot, and RPC contracts; this does not imply compatibility with other DSH versions.
 - Desktop uses the same Web interface but has a separate `desktop` profile. Enable cost settings in that profile after installation.
 - The plugin is ESM JavaScript and depends on `@deepseek-ai/schemastery` and `zod`.
@@ -110,7 +110,7 @@ dsh plugin --profile web add file:./dsh-stats-decimal
 dsh web
 ~~~
 
-The PowerShell commands are the same. The `file:./dsh-stats-decimal` path is resolved from the current shell directory, not the profile directory. The `add` command adds the plugin to the profile and to `dsh.profile.bundles`; no manual insert is needed. The public `dsh` CLI does not manage the official Desktop profile. See the [DSH Desktop guide](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.1/apps/desktop/README.zh.md).
+The PowerShell commands are the same. The `file:./dsh-stats-decimal` path is resolved from the current shell directory, not the profile directory. The `add` command adds the plugin to the profile and to `dsh.profile.bundles`; no manual insert is needed. The public `dsh` CLI does not manage the official Desktop profile. See the [DSH Desktop guide](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/apps/desktop/README.zh.md).
 
 ## Update and uninstall
 
@@ -169,7 +169,7 @@ After editing the Desktop profile, restart Desktop. For Web, restart `dsh web` a
 
 The cost row appears only when `enableCost=true` and at least one currency is enabled. Each currency shows its cumulative and last-session-day amounts; the balance setting adds the recharge balance.
 
-The all-session daily estimate reads live and persisted Session logs through DSH's `sessionQuery` service on page load and refreshes every five minutes. It includes each session's owned events, including subagent sessions, and excludes fork-inherited events to avoid counting them twice. If the service is unavailable or any log cannot be read, the line reports that the total is unavailable. If any current-day event has unknown pricing, it reports `Cost unknown`. The estimate covers logs in the current DSH profile and is not an official account bill; Web and Desktop profiles have separate session stores.
+The all-session daily estimate reads live and persisted Session logs through DSH's `sessionQuery` service on page load, after the open session's daily cost changes or a session closes, and every five minutes as a fallback. Short bursts of usage and session events are coalesced. It includes each session's owned events, including subagent sessions, and excludes fork-inherited events to avoid counting them twice. If the service is unavailable or any log cannot be read, the line reports that the total is unavailable. If any current-day event has unknown pricing, it reports `Cost unknown`. The estimate covers logs in the current DSH profile and is not an official account bill; Web and Desktop profiles have separate session stores.
 
 ### `peakHours`
 

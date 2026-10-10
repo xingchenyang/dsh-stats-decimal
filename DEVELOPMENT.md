@@ -4,9 +4,9 @@ This guide records technical context, key decisions, and handoff information. In
 
 ## Current status
 
-- Compatibility target: DeepSeek Harness `v0.2.0-rc.1` (official release commit `4878cda`). Account-login balance display was confirmed in a Desktop GitHub installation; that runtime check covers only this path.
+- Compatibility target: DeepSeek Harness `v0.2.0-rc.2` (official release commit `639ed01`); relevant release-tag contracts verified.
 - Desktop loads the full Web application through Electron but has its own `$DSH_HOME/profiles/desktop`, plugin package-manager state, and bundled pnpm, isolated from the Web profile. `dsh.client.platform: "web"` applies to the embedded Web interface. Manage Web plugins with `dsh plugin --profile web`; manage Desktop plugins from the app's Plugins page and configure the Desktop profile separately.
-- Upstream reference: [DSH v0.2.0-rc.1 release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.0-rc.1) (commit `4878cda`).
+- Upstream reference: [DSH v0.2.0-rc.2 release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.0-rc.2) (commit `639ed01`).
 - Stack: ESM JavaScript, Cordis Host/Web bundles, `@deepseek-ai/schemastery`, and `zod`.
 - The billing projection version is `stateVersion: 7`. Version 5 added statutory-holiday date spans; version 6 added localized holiday names; version 7 changes how reported cache-write usage is priced and refolds prior sessions.
 - For a GitHub installation, Desktop's profile package manager installs the dependencies declared by the plugin. Restart Desktop after installing or updating. To update an installed GitHub plugin, submit the same URL again through Add Plugin.
@@ -19,14 +19,15 @@ This guide records technical context, key decisions, and handoff information. In
 3. The projection's `wire.viewSchema` sends cumulative and last-day cost, enabled currencies, pricing settings, and holiday spans with Chinese and English names to the Web client.
 4. The Web client preserves DSH's native `StatsPills` and registers a separate billing item in `conversation.composer.dock`. `ContextMeter` is a later sibling of the dock slot. When billing is enabled, the client permits the shared footer to wrap and uses flex order to place billing below both native statistics items as a separate second row. The row gap is 4 px and the billing row has no background decoration.
 5. Balance uses DSH Connection's shared exact-match `/api` route. The Host first resolves `DEEPSEEK_API_KEY` through DSH credentials and calls DeepSeek `/user/balance`. Without an API key, it can query the optional `deepseekAccount` Host service through `getBalance(AccountClientMetadata)`. DSH's provider owns account tokens and Platform request headers; credentials do not reach the browser.
-6. The all-session daily estimate uses DSH `sessionQuery.listSessions()` and `readSession()` on the Host. It prices only the current Beijing date, counts each session's owned events (skipping fork-inherited prefixes), and returns only the date, totals, and count through the authenticated `/api` route. Raw session events and message content stay on the Host. Reads run in batches of four and are folded in deterministic session/event order. The client shows a loading status, results are cached for one minute, and the client refreshes them every five minutes.
+6. The all-session daily estimate uses DSH `sessionQuery.listSessions()` and `readSession()` on the Host. It prices only the current Beijing date, counts each session's owned events (skipping fork-inherited prefixes), and returns only the date, totals, and count through the authenticated `/api` route. Raw session events and message content stay on the Host. Reads run in batches of four and are folded in deterministic session/event order. The client shows a loading status and refreshes after the open session's daily cost changes or DSH forwards `api-session/removed`, coalescing short bursts and keeping a five-minute fallback. Results are cached for one minute; event-triggered refreshes force a fresh scan and supersede any older in-flight result.
+7. One client-side timeout scheduler serves the balance and all-session daily refresh jobs plus the period-label clock. Balance and all-session daily cost start immediately and use five-minute fallback intervals; the period label is checked at each Beijing hour boundary and on initial render. Beijing midnight also requests a fresh all-session daily estimate. The label classifier always reads the current `peakHours` and holiday data; the hourly schedule does not encode pricing rules.
 
 Balance is not written to the Session. Session logs reject unknown event types, and the projection already provides the session totals; the plugin therefore does not append custom balance events.
 
 ## Code map
 
 - `lib/index.js`: Host plugin, configuration schema, `billingLedger` projection, session-query aggregation, balance RPC, and DSH credentials service call.
-- `lib/client.js`: Web session cost and all-session daily total, period status, localization, and balance polling.
+- `lib/client.js`: Web session cost and all-session daily total, period status, localization, balance polling, and the shared refresh scheduler.
 - `lib/pricing.js`: Historical price periods, announcement archive, price overrides, cost calculation, and Beijing-time peak/off-peak classification.
 - `lib/billing-calendar/index.js`: The single program entry point for annual statutory-holiday data and Host date queries. `2026.js` contains the complete 2026 official holiday spans.
 - `docs/BILLING_CALENDAR.md`: Holiday-pricing evidence, calendar sources, missing-year fallback, and annual maintenance.

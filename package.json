@@ -1,9 +1,9 @@
 {
   "name": "dsh-stats-decimal",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "type": "module",
   "main": "lib/index.js",
-  "description": "DSH v0.2.0-rc.1 plugin: preserves native StatsPills and adds CNY/USD cost, all-session daily totals, recharge balance, and Beijing date-type pricing status.",
+  "description": "DSH v0.2.0-rc.2 plugin: preserves native StatsPills and adds CNY/USD cost, all-session daily totals, recharge balance, and Beijing date-type pricing status.",
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.4",
     "zod": "^4.4.3"
