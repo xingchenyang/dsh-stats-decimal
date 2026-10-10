@@ -6,7 +6,7 @@
 
 [English](README.md) | 中文
 
-> 本文件是与插件版本 `0.8.0` 对应的中文理解快照。发生冲突时，以英文版 `README.md` 为准；快照版本和同步状态见[本地化清单](docs/localization-manifest.json)。
+> 本文件是与插件版本 `0.8.2` 对应的中文理解快照。发生冲突时，以英文版 `README.md` 为准；快照版本和同步状态见[本地化清单](docs/localization-manifest.json)。
 
 这是一个运行于 DeepSeek Harness Web 会话及 Desktop 应用内嵌 Web 界面的 Cordis 插件。它保留 DSH 原生可展开会话统计，并增加 CNY/USD 费用估算、充值余额和当前计价时段。费用由 Host 根据会话事件计算。余额通过 Host 侧 RPC 查询，API Key 不会进入浏览器或 Session 日志。
 
@@ -15,7 +15,7 @@
 - 保留 DSH 原生 `StatsPills` 的轮次、速度、精确 token 数和缓存命中详情。
 - 独立显示费用和余额账本，不覆盖 DSH 原生 `stats` 项。
 - 显示 CNY/USD 会话累计费用、会话最后一个自然日的费用和充值余额。
-- 在第二行显示当前北京时间日期的本地全会话费用估算，包含子代理会话。
+- 在第二行显示当前客户端时区日期的全会话费用估算，包含子代理会话；峰谷计价仍按北京时间。
 - 根据每条事件发生时的历史模型价格、缓存桶、输出 token 及北京时间计价时段重放费用。
 - 显示当前北京时间日期类型和计价时段：工作日高峰/空闲、周末空闲或带名称的法定节假日。界面会显示本地化节日名称。
 - 周六、周日（包括调休上班日）和已编入日历的中国法定节假日始终使用谷价。可为内置模型或其他模型配置完整价格。
@@ -33,9 +33,10 @@
 
 ## 兼容性与代码结构
 
-- 当前兼容目标：DeepSeek Harness `v0.2.0-rc.2`（插件 `0.8.1`）。
+- 当前兼容目标：DeepSeek Harness `v0.2.0-rc.2`（插件 `0.8.2`）。
 - 插件使用 projection、slot 和 RPC contract；这不代表兼容其他 DSH 版本。
 - Desktop 使用同一 Web 界面，但拥有独立的 `desktop` profile。安装后需在该 profile 启用费用配置。
+- Web 和 Desktop 的全会话当日估算均支持 DeepSeek API Key（`deepseek-official`）及账户登录（`deepseek-account`）推理方式。Web 使用浏览器 IANA 时区；Desktop 使用内嵌 Web renderer 提供的本地 IANA 时区。估算读取当前 profile 的会话日志，不依赖认证方式。
 - 插件使用 ESM JavaScript，依赖 `@deepseek-ai/schemastery` 和 `zod`。
 
 ~~~text
@@ -48,14 +49,14 @@ scripts/reload-plugin.mjs 重新安装本地 file: 插件快照
 
 ## 显示内容
 
-DSH 原生统计保持不变。插件在 composer 下方、原生统计 pills 和上下文计量器之后添加独立费用区。第一行显示当前 Session 账本，第二行显示当前北京时间日期的本地全会话费用估算。该区域没有背景装饰。金额显示两位小数并直接截断，不四舍五入。
+DSH 原生统计保持不变。插件在 composer 下方、原生统计 pills 和上下文计量器之后添加独立费用区。第一行显示当前 Session 账本，第二行显示按当前客户端时区划分日期的全会话费用估算。该区域没有背景装饰。金额显示两位小数并直接截断，不四舍五入；峰谷计价仍按北京时间。
 
 示例：
 
 ~~~text
 工作日 · 高峰时段  CNY 累计 ¥0.57 · 今日 ¥0.57 · 余额 ¥89.54 | USD 累计 $0.08 · 今日 $0.08 · 余额 $0.00
 Weekday · PEAK  CNY Total ¥0.57 · Today ¥0.57 · Balance ¥89.54 | USD Total $0.08 · Today $0.08 · Balance $0.00
-北京时间 2026-10-09 · 本地全会话今日 CNY ¥9.22 · USD $1.38 · 25 个会话
+Europe/Paris 2026-10-09 · 本地全会话今日 CNY ¥9.22 · USD $1.38 · 25 个会话
 ~~~
 
 每个启用币种只显示一次。多币种用 `|` 分隔；单币种不显示分隔符。计价未知不会隐藏或改变余额。
@@ -171,7 +172,7 @@ Desktop 使用 `$DSH_HOME\profiles\desktop\cordis.patch.yml`。文件不存在�
 
 只有 `enableCost=true` 且至少启用一种币时才显示费用行。每种币显示累计金额和会话最后一个自然日的金额；启用余额后还会显示充值余额。
 
-全会话当日估算会在页面加载、当前会话的当日费用变化或会话结束后，以及每五分钟兜底时通过 DSH 的 `sessionQuery` 服务读取当前 profile 中的实时和已持久化 Session 日志。短时间连续发生的用量和会话事件会合并刷新。它汇总每个 Session 自己产生的事件，包含子代理 Session，并排除 fork 继承的事件前缀以免重复计算。若查询服务不可用或任一日志无法读取，界面会显示统计暂不可用；若当天任一事件的价格未知，则显示费用未知。该估算只覆盖当前 DSH profile 的日志，不是官方账户账单；Web 和 Desktop profile 的会话存储互相独立。
+全会话当日估算会在页面加载、当前会话的当日费用变化或会话结束后、本地午夜，以及每五分钟兜底时通过 DSH 的 `sessionQuery` 服务读取当前 profile 中的实时和已持久化 Session 日志。Web 浏览器或 Desktop 内嵌 Web renderer 会把 IANA 时区传给 Host，因此日期边界跟随当前客户端/设备时区并适用夏令时变化；客户端无法提供时区时使用 UTC。该日志估算不依赖会话使用 DeepSeek API Key 还是账户登录认证。峰谷计价仍按北京时间。短时间连续发生的用量和会话事件会合并刷新。它汇总每个 Session 自己产生的事件，包含子代理 Session，并排除 fork 继承的事件前缀以免重复计算。若查询服务不可用或任一日志无法读取，界面会显示统计暂不可用；若当天任一事件的价格未知，则显示费用未知。该估算只覆盖当前 DSH profile 的日志，不是官方账户账单；Web 和 Desktop profile 的会话存储互相独立。
 
 ### `peakHours`
 
@@ -217,6 +218,7 @@ overridePricing:
 - Host 通过 DSH credentials service 解析 `DEEPSEEK_API_KEY`，再调用 DeepSeek 余额 API。凭据存储格式由 DSH 管理；插件不读取凭据文件。
 - 未配置 API Key 时，插件可以使用 DSH 可选的 `deepseekAccount` 服务读取已登录账户的充值余额。不要在插件中配置账户 token 或 `apiKey`。
 - API Key 与账户登录同时可用时优先使用 API Key。账户登录路径只返回充值钱包，不包含赠送钱包。
+- Web 和 Desktop 均可使用这两种余额路径。插件不会查询第三方模型服务商的账单或用量接口；每日统计仍是根据本地 token 用量和已配置模型价格计算的估算。
 - API Key 只在 Host 侧解析和使用，不发送到浏览器、projection 或 Session 日志。
 - 页面加载时读取一次，之后每五分钟轮询。刷新页面可手动重新读取。
 - 凭据不可用、请求失败或某币种没有充值余额时显示 `Balance –`。
@@ -224,7 +226,7 @@ overridePricing:
 ## 注意事项与许可证
 
 - “今日”按 Session 日志中最后一个自然日统计。打开较早的 Session 时，它可能不是现实中的今天。
-- 全会话当日估算使用当前北京时间日期，只覆盖当前 DSH profile 中 `sessionQuery` 可读取的会话。
+- 全会话当日估算使用 Web 浏览器或 Desktop renderer 的当前 IANA 时区，只覆盖当前 DSH profile 中 `sessionQuery` 可读取的会话。
 - 费用根据本地 token 用量和价格表估算，最终金额以 DeepSeek 官方账单为准。
 - 余额是独立的官方 API 数据。模型价格未知不会隐藏或改变 DeepSeek 返回的余额。
 - 这是一个独立个人项目，与 DeepSeek、DeepSeek Harness 或 OpenAI 没有隶属、合作或背书关系。部分实现和文档使用了 AI 辅助。项目依据 [MIT License](LICENSE) 发布。

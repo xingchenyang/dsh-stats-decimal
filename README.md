@@ -13,7 +13,7 @@ This Cordis plugin runs in DeepSeek Harness Web sessions and the Desktop app's e
 - Keeps native `StatsPills` details for turns, speed, exact token counts, and cache hits.
 - Adds a separate cost and balance ledger without replacing DSH's native `stats` item.
 - Shows cumulative session cost, cost for the last calendar day in the session, and recharge balance in CNY and USD.
-- Shows a second-line estimate for the current Beijing day's usage across sessions in the current DSH profile, including subagent sessions.
+- Shows a second-line estimate for the current client time zone's day across sessions in the current DSH profile, including subagent sessions.
 - Replays each event using its historical model price, cache buckets, output tokens, and Beijing-time pricing period.
 - Shows the current Beijing date type and pricing period: weekday peak/off-peak, weekend off-peak, or a named statutory holiday. The interface displays localized holiday names.
 - Saturday, Sunday (including makeup workdays), and bundled Chinese statutory holidays always use off-peak prices. Complete custom prices can be supplied for built-in or additional models.
@@ -31,9 +31,10 @@ This Cordis plugin runs in DeepSeek Harness Web sessions and the Desktop app's e
 
 ## Compatibility and code map
 
-- Current target: DeepSeek Harness `v0.2.0-rc.2` (plugin `0.8.1`).
+- Current target: DeepSeek Harness `v0.2.0-rc.2` (plugin `0.8.2`).
 - The plugin uses projection, slot, and RPC contracts; this does not imply compatibility with other DSH versions.
 - Desktop uses the same Web interface but has a separate `desktop` profile. Enable cost settings in that profile after installation.
+- The all-session daily estimate works in Web and Desktop with both DeepSeek API-key (`deepseek-official`) and account-login (`deepseek-account`) inference. Web uses the browser's IANA time zone; Desktop uses the embedded Web renderer's local IANA time zone. The estimate reads the active profile's session logs and does not depend on the authentication method.
 - The plugin is ESM JavaScript and depends on `@deepseek-ai/schemastery` and `zod`.
 
 ~~~text
@@ -46,14 +47,14 @@ scripts/reload-plugin.mjs Reinstalls the local file: plugin snapshot
 
 ## Display
 
-The native DSH statistics remain intact. The plugin adds a separate cost readout below the composer, after the native statistics pills and context meter. Its first line shows the open session's ledger and its second line shows the current Beijing day's total across sessions in the current DSH profile. The readout has no background decoration. Amounts are truncated to two decimal places; they are never rounded.
+The native DSH statistics remain intact. The plugin adds a separate cost readout below the composer, after the native statistics pills and context meter. Its first line shows the open session's ledger and its second line shows the current client time zone's daily total across sessions in the current DSH profile. The readout has no background decoration. Amounts are truncated to two decimal places; they are never rounded.
 
 Example output:
 
 ~~~text
 Weekday · PEAK  CNY Total ¥0.57 · Today ¥0.57 · Balance ¥89.54 | USD Total $0.08 · Today $0.08 · Balance $0.00
 工作日 · 高峰时段  CNY 累计 ¥0.57 · 今日 ¥0.57 · 余额 ¥89.54 | USD 累计 $0.08 · 今日 $0.08 · 余额 $0.00
-Beijing 2026-10-09 · Local sessions today CNY ¥9.22 | USD $1.38 · 25 sessions
+Local sessions · 2026-10-09 (Europe/Paris) · Today CNY ¥9.22 | USD $1.38 · 25 sessions
 ~~~
 
 Each enabled currency appears once. Multiple currencies are separated by `|`; a single currency has no separator. Unknown pricing does not hide or change the balance.
@@ -169,7 +170,7 @@ After editing the Desktop profile, restart Desktop. For Web, restart `dsh web` a
 
 The cost row appears only when `enableCost=true` and at least one currency is enabled. Each currency shows its cumulative and last-session-day amounts; the balance setting adds the recharge balance.
 
-The all-session daily estimate reads live and persisted Session logs through DSH's `sessionQuery` service on page load, after the open session's daily cost changes or a session closes, and every five minutes as a fallback. Short bursts of usage and session events are coalesced. It includes each session's owned events, including subagent sessions, and excludes fork-inherited events to avoid counting them twice. If the service is unavailable or any log cannot be read, the line reports that the total is unavailable. If any current-day event has unknown pricing, it reports `Cost unknown`. The estimate covers logs in the current DSH profile and is not an official account bill; Web and Desktop profiles have separate session stores.
+The all-session daily estimate reads live and persisted Session logs through DSH's `sessionQuery` service on page load, after the open session's daily cost changes or a session closes, at local midnight, and every five minutes as a fallback. The Web browser or Desktop's embedded Web renderer passes its IANA time zone to the Host so the daily boundary follows that client/device zone, including daylight-saving changes; UTC is used if the client cannot provide a zone. This log-based estimate is independent of whether the session used DeepSeek API-key or account-login authentication. Short bursts of usage and session events are coalesced. It includes each session's owned events, including subagent sessions, and excludes fork-inherited events to avoid counting them twice. If the service is unavailable or any log cannot be read, the line reports that the total is unavailable. If any current-day event has unknown pricing, it reports `Cost unknown`. The estimate covers logs in the current DSH profile and is not an official account bill; Web and Desktop profiles have separate session stores. The peak/off-peak price calculation and its status label continue to use Beijing time.
 
 ### `peakHours`
 
@@ -215,6 +216,7 @@ For every enabled currency, provide `cacheHit`, `cacheMiss`, and `output` prices
 - The Host resolves `DEEPSEEK_API_KEY` through the DSH credentials service, then calls the DeepSeek balance API. DSH owns the credential storage format; the plugin does not read credential files.
 - When no API key is configured, the plugin can use DSH's optional `deepseekAccount` service to read the logged-in account's recharge balance. Do not configure an account token or `apiKey` in the plugin.
 - The API-key route takes priority when both API key and account login are available. The account-login route reports the recharge wallet only, not the promotional wallet.
+- These balance routes are available from both Web and Desktop. A third-party model provider's invoice or usage endpoint is not queried; the daily estimate remains a local token-usage estimate using configured model prices.
 - The API key is resolved and used only on the Host; it is not sent to the browser, projection, or Session log.
 - Balance is read on page load and polled every five minutes. Refresh the page to request it manually.
 - If credentials are unavailable, a request fails, or a currency has no recharge balance, the display shows `Balance –`.
@@ -222,7 +224,7 @@ For every enabled currency, provide `cacheHit`, `cacheMiss`, and `output` prices
 ## Notes and license
 
 - “Today” means the last calendar day present in the Session log. When an older Session is opened, it may not mean today's real-world date.
-- The all-session daily estimate is dated with the current Beijing calendar day and covers only sessions available through the current DSH profile's `sessionQuery` service.
+- The all-session daily estimate is dated with the Web browser's or Desktop renderer's current IANA time zone and covers only sessions available through the current DSH profile's `sessionQuery` service.
 - Costs are estimates based on local token usage and the price table. The final amount is determined by DeepSeek's official bill.
 - Balance is independent official API data. Unknown model pricing does not hide or change the balance returned by DeepSeek.
 - This independent personal project is not affiliated with or endorsed by DeepSeek, DeepSeek Harness, or OpenAI. Some implementation and documentation used AI assistance. The project is distributed under the [MIT License](LICENSE).

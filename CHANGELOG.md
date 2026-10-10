@@ -4,7 +4,12 @@ This file records user-visible changes. For development context and technical de
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.2] - 2026-10-10
+
+### Changed
+
+- Use the current client IANA time zone for the all-session daily estimate in Web and Desktop while retaining Beijing time for peak/off-peak pricing.
+- Keep the daily estimate independent of DeepSeek API-key or account-login authentication; use the active profile's session logs in either mode.
 
 ## [0.8.1] - 2026-10-10
 

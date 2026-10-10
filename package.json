@@ -1,6 +1,6 @@
 {
   "name": "dsh-stats-decimal",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "type": "module",
   "main": "lib/index.js",
   "description": "DSH v0.2.0-rc.2 plugin: preserves native StatsPills and adds CNY/USD cost, all-session daily totals, recharge balance, and Beijing date-type pricing status.",
