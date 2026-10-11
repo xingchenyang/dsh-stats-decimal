@@ -4,6 +4,20 @@ This file records user-visible changes. For development context and technical de
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.3] - 2026-10-11
+
+### Fixed
+
+- Use the client time zone for the open Session's daily cost, matching the all-session daily estimate, while retaining Beijing time for pricing.
+- Stop balance polling when disabled without interrupting cost or all-session aggregation.
+- Clear balances immediately when the Session, selected provider, verified official route, or credential reference changes; expire successful values after five minutes, reject late results, and settle refreshes into an unavailable state after errors.
+
+### Security Hardening
+
+- Follow the effective provider selected in the current DSH Session. Account balances use only DSH's account service; official balances require the verified canonical route and its configured credential reference. Never select from credential availability or fall back across providers.
+- Restrict API-key balance requests to `https://api.deepseek.com/user/balance` over HTTPS with redirects rejected. Keep credentials Host-side and reject custom gateways before resolving them.
+- Invalidate in-flight work on credential-reference changes, bound and cancel official balance requests, cap parsed response bodies at 64 KiB, and return sanitized unavailable errors without exposing secrets in client state or Session events.
+
 ## [0.8.2] - 2026-10-10
 
 ### Changed

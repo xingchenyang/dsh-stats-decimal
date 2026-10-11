@@ -6,7 +6,7 @@
 
 [English](README.md) | 中文
 
-> 本文件是与插件版本 `0.8.2` 对应的中文理解快照。发生冲突时，以英文版 `README.md` 为准；快照版本和同步状态见[本地化清单](docs/localization-manifest.json)。
+> 本文件是与插件版本 `0.8.3` 对应的中文理解快照。发生冲突时，以英文版 `README.md` 为准；快照版本和同步状态见[本地化清单](docs/localization-manifest.json)。
 
 这是一个运行于 DeepSeek Harness Web 会话及 Desktop 应用内嵌 Web 界面的 Cordis 插件。它保留 DSH 原生可展开会话统计，并增加 CNY/USD 费用估算、充值余额和当前计价时段。费用由 Host 根据会话事件计算。余额通过 Host 侧 RPC 查询，API Key 不会进入浏览器或 Session 日志。
 
@@ -33,7 +33,7 @@
 
 ## 兼容性与代码结构
 
-- 当前兼容目标：DeepSeek Harness `v0.2.0-rc.2`（插件 `0.8.2`）。
+- 当前兼容目标：DeepSeek Harness `v0.2.0-rc.2`（插件 `0.8.3`）。
 - 插件使用 projection、slot 和 RPC contract；这不代表兼容其他 DSH 版本。
 - Desktop 使用同一 Web 界面，但拥有独立的 `desktop` profile。安装后需在该 profile 启用费用配置。
 - Web 和 Desktop 的全会话当日估算均支持 DeepSeek API Key（`deepseek-official`）及账户登录（`deepseek-account`）推理方式。Web 使用浏览器 IANA 时区；Desktop 使用内嵌 Web renderer 提供的本地 IANA 时区。估算读取当前 profile 的会话日志，不依赖认证方式。
@@ -157,7 +157,6 @@ Desktop 使用 `$DSH_HOME\profiles\desktop\cordis.patch.yml`。文件不存在�
     peakHours: [9, 10, 11, 14, 15, 16, 17]
     balance:
       enabled: true
-      # apiBase: 'https://api.deepseek.com'
 ~~~
 
 修改 Desktop profile 后重启 Desktop；修改 Web profile 后重启 `dsh web` 并硬刷新（Ctrl+F5）。仅安装插件不会显示费用行，因为 `enableCost`、`cnyEnabled` 和 `usdEnabled` 默认均为 `false`。两个 profile 的配置互不共享。
@@ -215,13 +214,15 @@ overridePricing:
 
 ### 余额
 
-- Host 通过 DSH credentials service 解析 `DEEPSEEK_API_KEY`，再调用 DeepSeek 余额 API。凭据存储格式由 DSH 管理；插件不读取凭据文件。
-- 未配置 API Key 时，插件可以使用 DSH 可选的 `deepseekAccount` 服务读取已登录账户的充值余额。不要在插件中配置账户 token 或 `apiKey`。
-- API Key 与账户登录同时可用时优先使用 API Key。账户登录路径只返回充值钱包，不包含赠送钱包。
+- `balance.enabled=true` 时，余额会跟随当前 DSH Session 实际选中的模型 provider。待执行的模型选择优先；否则使用该 Session 最近一次请求的模型；新 Session 跟随 DSH 当前默认模型。无需配置 provider。
+- 只有 Host 确认当前 DSH 路由使用规范的 `https://api.deepseek.com/anthropic` Messages endpoint 时，`deepseek-official` 才显示余额。插件通过 DSH credentials service 解析该路由配置的 `apiKeyEnv` 引用（默认 `DEEPSEEK_API_KEY`），并且只请求固定地址 `https://api.deepseek.com/user/balance`，拒绝重定向。自定义网关或缺少有效路由配置时会显示 `Balance –`，且不会解析 API Key。
+- `deepseek-account` 只调用 DSH 的 `deepseekAccount.getBalance()` 服务读取已登录账户的充值余额；该路径只返回充值钱包，不包含赠送钱包。不要在插件中配置账户 token 或 API Key。
+- 插件不会根据现有凭据或登录状态推测 provider。所选 provider 的服务或凭据不可用时显示 `Balance –`，绝不尝试另一个 provider。未知或无法确认的模型 provider 也显示 `Balance –`。
+- 为兼容旧 profile YAML，旧字段 `balance.provider` 和 `balance.apiBase` 会被接受但忽略。可在方便时删除；`apiBase` 无法改变固定 HTTPS 请求地址。
 - Web 和 Desktop 均可使用这两种余额路径。插件不会查询第三方模型服务商的账单或用量接口；每日统计仍是根据本地 token 用量和已配置模型价格计算的估算。
-- API Key 只在 Host 侧解析和使用，不发送到浏览器、projection 或 Session 日志。
-- 页面加载时读取一次，之后每五分钟轮询。刷新页面可手动重新读取。
-- 凭据不可用、请求失败或某币种没有充值余额时显示 `Balance –`。
+- API Key 只在 Host 侧解析和使用，只发送到固定官方地址，不发送到浏览器、projection 或 Session 日志。Host 会从同一个 DSH 设置快照读取 endpoint 和凭据引用；请求期间 provider 路由或设置代次发生变化时会丢弃余额结果。这能将请求绑定到配置的路由，但不能从密码学上证明 API Key 的所有权。
+- 启用时，页面加载会读取余额，之后每五分钟轮询。切换 Session 或 provider 会立即清除旧余额。刷新页面可手动重新读取。
+- 禁用余额时，浏览器不会轮询余额 RPC。请求失败或缺少某币种余额时显示 `Balance –`。
 
 ## 注意事项与许可证
 
