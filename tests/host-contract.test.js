@@ -391,7 +391,7 @@ test("default official provider resolves the API key and uses the fixed Host des
 				return { value: fakeCredential, source: "test" };
 			}
 		},
-		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [] }; } },
+		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } },
 		serviceLookups,
 		logs
 	});
@@ -403,8 +403,8 @@ test("default official provider resolves the API key and uses the fixed Host des
 			authorization = init.headers.Authorization;
 			return new Response(JSON.stringify({
 				balance_infos: [
-					{ currency: "CNY", topped_up_balance: "12.34", private: upstreamOnlyValue },
-					{ currency: "USD", topped_up_balance: 56.78 }
+					{ currency: "CNY", total_balance: "20.00", granted_balance: "7.66", topped_up_balance: "12.34", private: upstreamOnlyValue },
+					{ currency: "USD", total_balance: 58.00, granted_balance: 1.22, topped_up_balance: 56.78 }
 				],
 				access_token: upstreamOnlyValue
 			}), { headers: { "content-type": "application/json" } });
@@ -427,7 +427,7 @@ test("default official provider resolves the API key and uses the fixed Host des
 			rpcId: "rpc-balance-1",
 			result: {
 				ok: true,
-				value: { enabled: true, provider: "deepseek-official", balanceGeneration: 0, balances: { CNY: 12.34, USD: 56.78 }, error: null }
+				value: { enabled: true, provider: "deepseek-official", balanceGeneration: 0, balances: { CNY: 20, USD: 58 }, error: null }
 			}
 		});
 		assert.deepEqual(logs, []);
@@ -453,7 +453,7 @@ test("official balance binds a custom credential reference to the canonical conf
 			assert.equal(String(url), "https://api.deepseek.com/user/balance");
 			assert.equal(init.redirect, "error");
 			assert.equal(init.headers.Authorization, `Bearer ${fakeCredential}`);
-			return new Response(JSON.stringify({ balance_infos: [{ currency: "CNY", topped_up_balance: 5 }] }));
+			return new Response(JSON.stringify({ balance_infos: [{ currency: "CNY", total_balance: 5 }] }));
 		};
 		const response = await makeRpcRequest(route, VALID_BALANCE_RPC);
 		const body = await response.json();
@@ -654,7 +654,7 @@ test("third-party provider routes never inspect DeepSeek credentials or call bal
 	const route = makeBalanceRoute({
 		modelSelection: { next: { provider: "openai", model: "third-party-model" }, lastUsed: null },
 		credentials: { async resolve() { credentialCalls += 1; return { value: "must-not-resolve" }; } },
-		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [] }; } }
+		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
 	});
 	const originalFetch = globalThis.fetch;
 	try {
@@ -738,7 +738,7 @@ test("a route change queued after credential resolution is caught at the final p
 			assert.equal(currentConfig.baseURL, canonical, "configuration is still canonical at dispatch");
 			assert.equal(String(url), "https://api.deepseek.com/user/balance");
 			assert.equal(init.redirect, "error");
-			return new Response(JSON.stringify({ balance_infos: [{ currency: "CNY", topped_up_balance: 99 }] }));
+			return new Response(JSON.stringify({ balance_infos: [{ currency: "CNY", total_balance: 99 }] }));
 		};
 		const response = await makeRpcRequest(route, VALID_BALANCE_RPC);
 		const body = await response.json();
@@ -768,7 +768,7 @@ test("a late balance response is discarded after adapter endpoint configuration 
 		globalThis.fetch = async () => {
 			fetchStarted();
 			return await new Promise((resolve) => { releaseFetch = () => resolve(new Response(JSON.stringify({
-				balance_infos: [{ currency: "CNY", topped_up_balance: 99 }]
+				balance_infos: [{ currency: "CNY", total_balance: 99 }]
 			}))); });
 		};
 		const pending = makeRpcRequest(route, VALID_BALANCE_RPC);
@@ -801,7 +801,7 @@ test("Session provider changes while credentials resolve stop dispatch without p
 		const route = makeBalanceRoute({
 			modelSelection: () => selection,
 			credentials: { async resolve() { credentialCalls += 1; credentialStarted.resolve(); return credential.promise; } },
-			account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [] }; } }
+			account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
 		});
 		const originalFetch = globalThis.fetch;
 		try {
@@ -838,7 +838,7 @@ test("Session invalidated while acquiring the credential service never calls cre
 			route.hostControl.emitProjection(sessionId);
 		},
 		credentials: { async resolve() { credentialCalls += 1; return { value: "must-not-resolve" }; } },
-		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [] }; } }
+		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
 	});
 	const originalFetch = globalThis.fetch;
 	try {
@@ -863,7 +863,7 @@ test("official to account to official during credential resolution invalidates t
 	const route = makeBalanceRoute({
 		modelSelection: () => selection,
 		credentials: { async resolve() { credentialStarted.resolve(); return credential.promise; } },
-		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [] }; } }
+		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
 	});
 	const originalFetch = globalThis.fetch;
 	try {
@@ -894,7 +894,7 @@ test("Session disappearance while credentials resolve prevents official dispatch
 	const route = makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 		credentials: { async resolve() { credentialStarted.resolve(); return credential.promise; } },
-		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [] }; } }
+		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
 	});
 	const originalFetch = globalThis.fetch;
 	try {
@@ -931,7 +931,7 @@ test("Session provider change at the final synchronous route check prevents Fetc
 			}
 		},
 		credentials: { async resolve() { credentialResolved = true; return { value: "final-check-key" }; } },
-		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [] }; } }
+		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
 	});
 	const originalFetch = globalThis.fetch;
 	try {
@@ -956,7 +956,7 @@ test("late successful Fetch after official-account-official invalidation is disc
 	const route = makeBalanceRoute({
 		modelSelection: () => selection,
 		credentials: { async resolve() { return { value: "late-session-response-key" }; } },
-		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [] }; } }
+		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
 	});
 	const originalFetch = globalThis.fetch;
 	try {
@@ -967,7 +967,7 @@ test("late successful Fetch after official-account-official invalidation is disc
 		route.hostControl.emitProjection(sessionId);
 		selection = { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null };
 		route.hostControl.emitProjection(sessionId);
-		fetchResponse.resolve(new Response(JSON.stringify({ balance_infos: [{ currency: "CNY", topped_up_balance: 88 }] })));
+		fetchResponse.resolve(new Response(JSON.stringify({ balance_infos: [{ currency: "CNY", total_balance: 88 }] })));
 		const value = (await (await pending).json()).result.value;
 		assert.equal(value.error, "selection-changed");
 		assert.deepEqual(value.balances, { CNY: null, USD: null });
@@ -1010,7 +1010,7 @@ test("credential rotation during credential resolution suppresses the pending di
 	const route = makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 		credentials: { async resolve() { credentialStarted.resolve(); return credential.promise; } },
-		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [] }; } }
+		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
 	});
 	const originalFetch = globalThis.fetch;
 	try {
@@ -1047,7 +1047,7 @@ test("credential invalidation does not depend on a route read during a transient
 			}
 		},
 		credentials: { async resolve() { credentialStarted.resolve(); return credential.promise; } },
-		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [] }; } },
+		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } },
 		logs
 	});
 	const originalFetch = globalThis.fetch;
@@ -1085,7 +1085,7 @@ test("credential update during credentials service acquisition invalidates befor
 			}
 		},
 		credentials: { async resolve() { credentialCalls += 1; return { value: "must-not-resolve-after-service-update" }; } },
-		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [] }; } }
+		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
 	});
 	const originalFetch = globalThis.fetch;
 	try {
@@ -1113,7 +1113,7 @@ test("unrelated credential updates cannot leak into or fall back from the select
 	const route = makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 		credentials: { async resolve() { credentialCalls += 1; credentialStarted.resolve(); return credential.promise; } },
-		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [] }; } },
+		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } },
 		logs
 	});
 	const originalFetch = globalThis.fetch;
@@ -1177,7 +1177,7 @@ test("credential rotation after dispatch rejects the late successful balance", a
 		const pending = makeRpcRequest(route, VALID_BALANCE_RPC);
 		await fetchStarted.promise;
 		route.hostControl.emit("credentials/reference-updated", "DEEPSEEK_API_KEY");
-		fetchResponse.resolve(new Response(JSON.stringify({ balance_infos: [{ currency: "CNY", topped_up_balance: 44 }] })));
+		fetchResponse.resolve(new Response(JSON.stringify({ balance_infos: [{ currency: "CNY", total_balance: 44 }] })));
 		const value = (await (await pending).json()).result.value;
 		assert.equal(apiCalls, 1, "the credential event cannot retract a request already handed to Fetch");
 		assert.equal(value.error, "request-cancelled");
@@ -1285,7 +1285,14 @@ test("selected account provider uses only DSH account balance even when API cred
 			async getBalance(metadata) {
 				accountCalls += 1;
 				assert.deepEqual(Object.keys(metadata).sort(), ["locale", "timezoneOffsetSeconds", "version"]);
-				return { status: "ready", value: [{ currency: "CNY", balance: "8.50", token: "provider-private" }] };
+				return {
+					status: "ready",
+					value: [{ currency: "CNY", balance: "8.50", token: "provider-private" }],
+					bonusWallets: [
+						{ currency: "CNY", balance: "1.25" },
+						{ currency: "USD", balance: "0.40" }
+					]
+				};
 			}
 		},
 		serviceLookups,
@@ -1303,7 +1310,7 @@ test("selected account provider uses only DSH account balance even when API cred
 		assert.deepEqual(body.result.value, {
 			enabled: true,
 			provider: "deepseek-account",
-			balances: { CNY: 8.5, USD: null },
+			balances: { CNY: 9.75, USD: 0.4 },
 			error: null
 		});
 		assert.doesNotMatch(JSON.stringify(body), /test-account-provider-must-not-read-key|provider-private|token/);
@@ -1323,7 +1330,7 @@ test("selected official provider with unavailable credentials fails without acco
 	const route = makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 		credentials: { async resolve() { throw new Error(credentialDetail); } },
-		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [] }; } },
+		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } },
 		serviceLookups,
 		logs
 	});
@@ -1347,7 +1354,7 @@ test("selected official provider with unavailable credentials fails without acco
 		const missingKeyRoute = makeBalanceRoute({
 			modelSelection: { next: null, lastUsed: { provider: "deepseek-official", model: "official-model" } },
 			credentials: { async resolve() { return { value: "" }; } },
-			account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [] }; } }
+			account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
 		});
 		const missingKeyResponse = await makeRpcRequest(missingKeyRoute, VALID_BALANCE_RPC);
 		const missingKeyBody = await missingKeyResponse.json();
@@ -1396,7 +1403,7 @@ test("pending Session selection takes precedence over last-used and ignores both
 	const route = makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-account", model: "pending-model" }, lastUsed: { provider: "deepseek-official", model: "used-model" } },
 		credentials: { async resolve() { calls.credentials += 1; return { value: "available-key" }; } },
-		account: { async getBalance() { calls.account += 1; return { status: "ready", value: [{ currency: "CNY", balance: 9 }] }; } }
+		account: { async getBalance() { calls.account += 1; return { status: "ready", value: [{ currency: "CNY", balance: 9 }], bonusWallets: [] }; } }
 	});
 	const response = await makeRpcRequest(route, {
 		...VALID_BALANCE_RPC,
@@ -1413,7 +1420,7 @@ test("last-used Session provider is used when no selection is pending", async ()
 	const route = makeBalanceRoute({
 		modelSelection: { next: null, lastUsed: { provider: "deepseek-official", model: "last-model" } },
 		credentials: { async resolve() { credentialCalls += 1; return { value: "test-key" }; } },
-		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [] }; } }
+		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
 	});
 	const originalFetch = globalThis.fetch;
 	try {
@@ -1435,7 +1442,7 @@ test("different Sessions with different providers each use their own authoritati
 		modelSelection: (_read, sessionId) => sessionId === accountId
 			? { next: { provider: "deepseek-account", model: "account-model" }, lastUsed: null }
 			: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
-		account: { async getBalance() { calls.account += 1; return { status: "ready", value: [] }; } },
+		account: { async getBalance() { calls.account += 1; return { status: "ready", value: [], bonusWallets: [] }; } },
 		credentials: { async resolve() { calls.credentials += 1; return { value: "test-key" }; } }
 	});
 	const originalFetch = globalThis.fetch;
@@ -1458,7 +1465,7 @@ test("concurrent Session components share one provider-wide balance request", as
 		modelSelection: { next: { provider: "deepseek-account", model: "account-model" }, lastUsed: null },
 		account: { async getBalance() {
 			accountCalls += 1;
-			return await new Promise((resolve) => { resolveAccount = () => resolve({ status: "ready", value: [{ currency: "CNY", balance: 2 }] }); });
+			return await new Promise((resolve) => { resolveAccount = () => resolve({ status: "ready", value: [{ currency: "CNY", balance: 2 }], bonusWallets: [] }); });
 		} }
 	});
 	const first = makeRpcRequest(route, { ...VALID_BALANCE_RPC, rpcId: "rpc-balance-a", payload: { sessionId: "session-a" } });
@@ -1479,7 +1486,7 @@ test("new Session follows the current global default, including default changes 
 	let credentialCalls = 0;
 	const route = makeBalanceRoute({
 		defaultSelection: () => currentDefault,
-		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [] }; } },
+		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } },
 		credentials: { async resolve() { credentialCalls += 1; return { value: "test-key" }; } }
 	});
 	const originalFetch = globalThis.fetch;
@@ -1509,7 +1516,7 @@ test("a default-model change during credential resolution prevents dispatch for 
 	const route = makeBalanceRoute({
 		defaultSelection: () => currentDefault,
 		credentials: { async resolve() { credentialStarted.resolve(); return credential.promise; } },
-		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [] }; } }
+		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
 	});
 	const originalFetch = globalThis.fetch;
 	try {
@@ -1558,7 +1565,7 @@ test("selected official provider fails closed when its key is missing even if ac
 	const route = makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 		credentials: { async resolve() { return undefined; } },
-		account: { async getBalance() { balanceCalls += 1; return { status: "ready", value: [] }; } }
+		account: { async getBalance() { balanceCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
 	});
 	const response = await makeRpcRequest(route, VALID_BALANCE_RPC);
 	assert.equal((await response.json()).result.value.error, "missing-api-key");
@@ -1578,7 +1585,7 @@ test("unsupported, malformed, and unresolved Session selections fail closed with
 		const route = makeBalanceRoute({
 			...options,
 			credentials: { async resolve() { credentialCalls += 1; return { value: "unused" }; } },
-			account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [] }; } }
+			account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
 		});
 		const response = await makeRpcRequest(route, VALID_BALANCE_RPC);
 		const body = await response.json();
@@ -1601,7 +1608,7 @@ test("a provider switch during the balance call rejects the late old-provider re
 		account: {
 			async getBalance() {
 				accountCalls += 1;
-				return await new Promise((resolve) => { releaseAccount = () => resolve({ status: "ready", value: [{ currency: "CNY", balance: 99 }] }); });
+				return await new Promise((resolve) => { releaseAccount = () => resolve({ status: "ready", value: [{ currency: "CNY", balance: 99 }], bonusWallets: [] }); });
 			}
 		},
 		credentials: { async resolve() { credentialCalls += 1; return { value: "unused" }; } }
@@ -1646,7 +1653,7 @@ test("account-selected failures never resolve credentials and official-selected 
 	let accountCalls = 0;
 	const officialRoute = makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
-		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [] }; } },
+		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } },
 		credentials: { async resolve() { return undefined; } }
 	});
 	const officialResponse = await makeRpcRequest(officialRoute, VALID_BALANCE_RPC);
@@ -1865,8 +1872,8 @@ test("invalid balance values are rejected without changing valid currency values
 	try {
 		globalThis.fetch = async () => new Response(JSON.stringify({
 			balance_infos: [
-				{ currency: "CNY", topped_up_balance: "33.20abc" },
-				{ currency: "USD", topped_up_balance: "-5" }
+				{ currency: "CNY", total_balance: "33.20abc" },
+				{ currency: "USD", total_balance: "-5" }
 			]
 		}), { headers: { "content-type": "application/json" } });
 		const response = await makeRpcRequest(route, VALID_BALANCE_RPC);
@@ -1875,7 +1882,7 @@ test("invalid balance values are rejected without changing valid currency values
 		assert.equal(body.result.value.error, null);
 
 		globalThis.fetch = async () => new Response(JSON.stringify({
-			balance_infos: [{ currency: "USD", topped_up_balance: "0x10" }]
+			balance_infos: [{ currency: "USD", total_balance: "0x10" }]
 		}), { headers: { "content-type": "application/json" } });
 		const hexResponse = await makeRpcRequest(route, VALID_BALANCE_RPC);
 		const hexBody = await hexResponse.json();

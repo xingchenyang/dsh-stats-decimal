@@ -6,13 +6,13 @@
 
 English | [中文](README.zh.md)
 
-This Cordis plugin runs in DeepSeek Harness Web sessions and the Desktop app's embedded Web interface. It preserves DSH's expandable native session statistics and adds estimated CNY/USD costs, recharge balances, and the current pricing period. Costs are calculated on the Host from session events. Balance requests use Host-side RPC, so the API key never enters the browser or Session log.
+This Cordis plugin runs in DeepSeek Harness Web sessions and the Desktop app's embedded Web interface. It preserves DSH's expandable native session statistics and adds estimated CNY/USD costs, balances, and the current pricing period. Costs are calculated on the Host from session events. Balance requests use Host-side RPC, so the API key never enters the browser or Session log.
 
 ## Features
 
 - Keeps native `StatsPills` details for turns, speed, exact token counts, and cache hits.
 - Adds a separate cost and balance ledger without replacing DSH's native `stats` item.
-- Shows cumulative cost for the open session, its cost for the current client-local day, and recharge balance in CNY and USD.
+- Shows cumulative cost for the open session, its cost for the current client-local day, and the selected provider's balance in CNY and USD.
 - Shows a second-line estimate for the current client time zone's day across sessions in the current DSH profile, including subagent sessions.
 - Replays each event using its historical model price, cache buckets, output tokens, and Beijing-time pricing period.
 - Shows the current Beijing date type and pricing period: weekday peak/off-peak, weekend off-peak, or a named statutory holiday. The interface displays localized holiday names.
@@ -31,7 +31,7 @@ This Cordis plugin runs in DeepSeek Harness Web sessions and the Desktop app's e
 
 ## Compatibility and code map
 
-- Current target: DeepSeek Harness `v0.2.0-rc.2` (plugin `0.8.3`).
+- Current target: DeepSeek Harness `v0.2.0-rc.2` (plugin `0.8.4`).
 - The plugin uses projection, slot, and RPC contracts; this does not imply compatibility with other DSH versions.
 - Desktop uses the same Web interface but has a separate `desktop` profile. Enable cost settings in that profile after installation.
 - The all-session daily estimate works in Web and Desktop with both DeepSeek API-key (`deepseek-official`) and account-login (`deepseek-account`) inference. Web uses the browser's IANA time zone; Desktop uses the embedded Web renderer's local IANA time zone. The estimate reads the active profile's session logs and does not depend on the authentication method.
@@ -167,7 +167,7 @@ After editing the Desktop profile, restart Desktop. For Web, restart `dsh web` a
 | `balance.enabled` | `false` | Add balance to each enabled currency segment |
 | `peakHours` | `[9,10,11,14,15,16,17]` | Beijing weekday peak hours |
 
-The cost row appears only when `enableCost=true` and at least one currency is enabled. Each currency shows cumulative cost and the open Session's current client-local daily cost; the balance setting adds the recharge balance.
+The cost row appears only when `enableCost=true` and at least one currency is enabled. Each currency shows cumulative cost and the open Session's current client-local daily cost; the balance setting adds the selected provider's balance.
 
 The Host reads live and persisted Session logs through DSH's `sessionQuery` service to calculate both daily amounts. The Web browser or Desktop's embedded Web renderer passes its IANA time zone so both daily boundaries follow that client/device zone, including daylight-saving changes; UTC is used if the client cannot provide a zone. The estimate is independent of whether sessions used DeepSeek API-key or account-login authentication. Short bursts of usage and session events are coalesced. The open-session amount counts only that session's owned events; the all-session amount includes owned events from every session, including subagents, and excludes fork-inherited events to avoid counting them twice. If the service is unavailable or any log cannot be read, the open-session daily amount shows `–` and the second line reports that its total is unavailable. If a current-day event has unknown pricing, its daily amount reports `Cost unknown`. The estimate covers logs in the current DSH profile and is not an official account bill; Web and Desktop profiles have separate session stores. Peak/off-peak pricing and its status label continue to use Beijing time.
 
@@ -214,7 +214,8 @@ For every enabled currency, provide `cacheHit`, `cacheMiss`, and `output` prices
 
 - When `balance.enabled=true`, the balance follows the effective model provider selected in the current DSH Session. A pending model selection wins; otherwise the last model used in that Session applies, and a new Session follows DSH's current default. No provider setting is needed.
 - `deepseek-official` balance is available only when the Host verifies that the active DSH route uses the canonical `https://api.deepseek.com/anthropic` Messages endpoint. It resolves that route's configured `apiKeyEnv` reference through DSH credentials (default `DEEPSEEK_API_KEY`) and calls only `https://api.deepseek.com/user/balance` with redirects rejected. Custom gateways or missing effective route configuration show `Balance –` without resolving a key.
-- `deepseek-account` calls only DSH's `deepseekAccount.getBalance()` service to read the logged-in account's recharge balance. It reports the recharge wallet only, not the promotional wallet. Do not configure an account token or API key in the plugin.
+- The official API route displays `total_balance`, which includes unexpired granted balance and topped-up balance.
+- `deepseek-account` calls only DSH's `deepseekAccount.getBalance()` service and adds its recharge and promotional wallets by currency. Do not configure an account token or API key in the plugin.
 - The selected provider is never inferred from credentials or sign-in state. If its service or credentials are unavailable, the balance shows `Balance –`; the plugin never tries the other provider. Unsupported or unresolved model providers also show `Balance –`.
 - Legacy `balance.provider` and `balance.apiBase` fields are accepted for older profile YAML but ignored. Remove them when convenient; `apiBase` cannot change the fixed HTTPS destination.
 - These balance routes are available from both Web and Desktop. A third-party model provider's invoice or usage endpoint is not queried; the daily estimate remains a local token-usage estimate using configured model prices.

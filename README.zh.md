@@ -6,15 +6,15 @@
 
 [English](README.md) | 中文
 
-> 本文件是与插件版本 `0.8.3` 对应的中文理解快照。发生冲突时，以英文版 `README.md` 为准；快照版本和同步状态见[本地化清单](docs/localization-manifest.json)。
+> 本文件是与插件版本 `0.8.4` 对应的中文理解快照。发生冲突时，以英文版 `README.md` 为准；快照版本和同步状态见[本地化清单](docs/localization-manifest.json)。
 
-这是一个运行于 DeepSeek Harness Web 会话及 Desktop 应用内嵌 Web 界面的 Cordis 插件。它保留 DSH 原生可展开会话统计，并增加 CNY/USD 费用估算、充值余额和当前计价时段。费用由 Host 根据会话事件计算。余额通过 Host 侧 RPC 查询，API Key 不会进入浏览器或 Session 日志。
+这是一个运行于 DeepSeek Harness Web 会话及 Desktop 应用内嵌 Web 界面的 Cordis 插件。它保留 DSH 原生可展开会话统计，并增加 CNY/USD 费用估算、余额和当前计价时段。费用由 Host 根据会话事件计算。余额通过 Host 侧 RPC 查询，API Key 不会进入浏览器或 Session 日志。
 
 ## 特性
 
 - 保留 DSH 原生 `StatsPills` 的轮次、速度、精确 token 数和缓存命中详情。
 - 独立显示费用和余额账本，不覆盖 DSH 原生 `stats` 项。
-- 显示 CNY/USD 会话累计费用、会话最后一个自然日的费用和充值余额。
+- 显示 CNY/USD 会话累计费用、会话最后一个自然日的费用和所选 provider 的余额。
 - 在第二行显示当前客户端时区日期的全会话费用估算，包含子代理会话；峰谷计价仍按北京时间。
 - 根据每条事件发生时的历史模型价格、缓存桶、输出 token 及北京时间计价时段重放费用。
 - 显示当前北京时间日期类型和计价时段：工作日高峰/空闲、周末空闲或带名称的法定节假日。界面会显示本地化节日名称。
@@ -33,7 +33,7 @@
 
 ## 兼容性与代码结构
 
-- 当前兼容目标：DeepSeek Harness `v0.2.0-rc.2`（插件 `0.8.3`）。
+- 当前兼容目标：DeepSeek Harness `v0.2.0-rc.2`（插件 `0.8.4`）。
 - 插件使用 projection、slot 和 RPC contract；这不代表兼容其他 DSH 版本。
 - Desktop 使用同一 Web 界面，但拥有独立的 `desktop` profile。安装后需在该 profile 启用费用配置。
 - Web 和 Desktop 的全会话当日估算均支持 DeepSeek API Key（`deepseek-official`）及账户登录（`deepseek-account`）推理方式。Web 使用浏览器 IANA 时区；Desktop 使用内嵌 Web renderer 提供的本地 IANA 时区。估算读取当前 profile 的会话日志，不依赖认证方式。
@@ -169,7 +169,7 @@ Desktop 使用 `$DSH_HOME\profiles\desktop\cordis.patch.yml`。文件不存在�
 | `balance.enabled` | `false` | 在启用币种片段中追加余额 |
 | `peakHours` | `[9,10,11,14,15,16,17]` | 北京时间工作日高峰钟点 |
 
-只有 `enableCost=true` 且至少启用一种币时才显示费用行。每种币显示累计金额和会话最后一个自然日的金额；启用余额后还会显示充值余额。
+只有 `enableCost=true` 且至少启用一种币时才显示费用行。每种币显示累计金额和会话最后一个自然日的金额；启用余额后还会显示所选 provider 返回的余额。
 
 全会话当日估算会在页面加载、当前会话的当日费用变化或会话结束后、本地午夜，以及每五分钟兜底时通过 DSH 的 `sessionQuery` 服务读取当前 profile 中的实时和已持久化 Session 日志。Web 浏览器或 Desktop 内嵌 Web renderer 会把 IANA 时区传给 Host，因此日期边界跟随当前客户端/设备时区并适用夏令时变化；客户端无法提供时区时使用 UTC。该日志估算不依赖会话使用 DeepSeek API Key 还是账户登录认证。峰谷计价仍按北京时间。短时间连续发生的用量和会话事件会合并刷新。它汇总每个 Session 自己产生的事件，包含子代理 Session，并排除 fork 继承的事件前缀以免重复计算。若查询服务不可用或任一日志无法读取，界面会显示统计暂不可用；若当天任一事件的价格未知，则显示费用未知。该估算只覆盖当前 DSH profile 的日志，不是官方账户账单；Web 和 Desktop profile 的会话存储互相独立。
 
@@ -216,7 +216,8 @@ overridePricing:
 
 - `balance.enabled=true` 时，余额会跟随当前 DSH Session 实际选中的模型 provider。待执行的模型选择优先；否则使用该 Session 最近一次请求的模型；新 Session 跟随 DSH 当前默认模型。无需配置 provider。
 - 只有 Host 确认当前 DSH 路由使用规范的 `https://api.deepseek.com/anthropic` Messages endpoint 时，`deepseek-official` 才显示余额。插件通过 DSH credentials service 解析该路由配置的 `apiKeyEnv` 引用（默认 `DEEPSEEK_API_KEY`），并且只请求固定地址 `https://api.deepseek.com/user/balance`，拒绝重定向。自定义网关或缺少有效路由配置时会显示 `Balance –`，且不会解析 API Key。
-- `deepseek-account` 只调用 DSH 的 `deepseekAccount.getBalance()` 服务读取已登录账户的充值余额；该路径只返回充值钱包，不包含赠送钱包。不要在插件中配置账户 token 或 API Key。
+- 官方 API 路径显示 `total_balance`，其中包含未过期赠送余额和充值余额。
+- `deepseek-account` 只调用 DSH 的 `deepseekAccount.getBalance()` 服务，并按币种合计该服务分别返回的充值钱包和赠送钱包。不要在插件中配置账户 token 或 API Key。
 - 插件不会根据现有凭据或登录状态推测 provider。所选 provider 的服务或凭据不可用时显示 `Balance –`，绝不尝试另一个 provider。未知或无法确认的模型 provider 也显示 `Balance –`。
 - 为兼容旧 profile YAML，旧字段 `balance.provider` 和 `balance.apiBase` 会被接受但忽略。可在方便时删除；`apiBase` 无法改变固定 HTTPS 请求地址。
 - Web 和 Desktop 均可使用这两种余额路径。插件不会查询第三方模型服务商的账单或用量接口；每日统计仍是根据本地 token 用量和已配置模型价格计算的估算。

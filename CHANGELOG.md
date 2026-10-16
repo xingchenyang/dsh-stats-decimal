@@ -4,6 +4,16 @@ This file records user-visible changes. For development context and technical de
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.4] - 2026-10-17
+
+### Changed
+
+- Include unexpired grants in the displayed balance for both DeepSeek API-key and DSH account-login routes. The official route uses `total_balance`; the account route sums DSH's recharge and bonus wallets.
+
+### Fixed
+
+- Retry transient Session-selection, RPC initialization, and account-service failures twice with short delays, so the first conversation can recover after DSH finishes startup without waiting for the regular five-minute refresh.
+
 ## [0.8.3] - 2026-10-11
 
 ### Fixed
