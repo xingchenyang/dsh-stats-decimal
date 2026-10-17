@@ -4,6 +4,16 @@ This file records user-visible changes. For development context and technical de
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.5] - 2026-10-17
+
+### Changed
+
+- Declare DeepSeek Harness `v0.2.1-rc.1` as the sole supported prerelease.
+
+### Fixed
+
+- Handle the Session Controller projection response discriminant and reject migration-required cache hints before provider selection or credential access.
+
 ## [0.8.4] - 2026-10-17
 
 ### Changed

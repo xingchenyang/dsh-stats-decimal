@@ -1,6 +1,6 @@
 # dsh-stats-decimal
 
-[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.2.0--rc.2-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.0-rc.2)
+[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.2.1--rc.1-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.1)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/license-MIT-2EA44F)](LICENSE)
 
@@ -31,7 +31,7 @@ This Cordis plugin runs in DeepSeek Harness Web sessions and the Desktop app's e
 
 ## Compatibility and code map
 
-- Current target: DeepSeek Harness `v0.2.0-rc.2` (plugin `0.8.4`).
+- Current target: DeepSeek Harness `v0.2.1-rc.1` (plugin `0.8.5`).
 - The plugin uses projection, slot, and RPC contracts; this does not imply compatibility with other DSH versions.
 - Desktop uses the same Web interface but has a separate `desktop` profile. Enable cost settings in that profile after installation.
 - The all-session daily estimate works in Web and Desktop with both DeepSeek API-key (`deepseek-official`) and account-login (`deepseek-account`) inference. Web uses the browser's IANA time zone; Desktop uses the embedded Web renderer's local IANA time zone. The estimate reads the active profile's session logs and does not depend on the authentication method.
@@ -111,7 +111,7 @@ dsh plugin --profile web add file:./dsh-stats-decimal
 dsh web
 ~~~
 
-The PowerShell commands are the same. The `file:./dsh-stats-decimal` path is resolved from the current shell directory, not the profile directory. The `add` command adds the plugin to the profile and to `dsh.profile.bundles`; no manual insert is needed. The public `dsh` CLI does not manage the official Desktop profile. See the [DSH Desktop guide](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/apps/desktop/README.zh.md).
+The PowerShell commands are the same. The `file:./dsh-stats-decimal` path is resolved from the current shell directory, not the profile directory. The `add` command adds the plugin to the profile and to `dsh.profile.bundles`; no manual insert is needed. The public `dsh` CLI does not manage the official Desktop profile. See the [DSH Desktop guide](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.1/apps/desktop/README.zh.md).
 
 ## Update and uninstall
 

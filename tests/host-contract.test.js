@@ -58,16 +58,30 @@ function makeBalanceRoute(options = {}) {
 	const disposers = [];
 	let projectionReads = 0;
 	const modelSelection = options.modelSelection ?? { next: null, lastUsed: null };
+	const projectionContract = options.projectionContract ?? "v0.2.0-rc.2";
 	const sessionController = options.sessionController === null ? null : {
 		async projections({ sessionId }, signal) {
 			projectionReads += 1;
 			options.onProjectionRead?.(sessionId, projectionReads, signal);
 			if (options.projectionError) throw new Error("private projection detail");
 			if (options.sessionExists === false) return null;
-			return {
-				asOfSeq: projectionReads,
-				values: { modelSelection: typeof modelSelection === "function" ? modelSelection(projectionReads, sessionId) : modelSelection }
+			if (Object.hasOwn(options, "projectionResponse")) {
+				return typeof options.projectionResponse === "function"
+					? options.projectionResponse(projectionReads, sessionId)
+					: options.projectionResponse;
+			}
+			const values = Object.hasOwn(options, "projectionValues")
+				? typeof options.projectionValues === "function"
+					? options.projectionValues(projectionReads, sessionId)
+					: options.projectionValues
+				: { modelSelection: typeof modelSelection === "function" ? modelSelection(projectionReads, sessionId) : modelSelection };
+			const baseline = {
+				asOfSeq: typeof options.asOfSeq === "function" ? options.asOfSeq(projectionReads, sessionId) : options.asOfSeq ?? projectionReads,
+				values
 			};
+			if (projectionContract === "v0.2.0-rc.2") return baseline;
+			if (projectionContract === "v0.2.1-rc.1") return { kind: "sequenced", ...baseline };
+			throw new Error(`Unknown test projection contract: ${projectionContract}`);
 		}
 	};
 	const defaultModel = {
@@ -1401,6 +1415,7 @@ test("selected account provider reports account authentication failures without 
 test("pending Session selection takes precedence over last-used and ignores both credential availability and payload provider", async () => {
 	const calls = { account: 0, credentials: 0 };
 	const route = makeBalanceRoute({
+		projectionContract: "v0.2.1-rc.1",
 		modelSelection: { next: { provider: "deepseek-account", model: "pending-model" }, lastUsed: { provider: "deepseek-official", model: "used-model" } },
 		credentials: { async resolve() { calls.credentials += 1; return { value: "available-key" }; } },
 		account: { async getBalance() { calls.account += 1; return { status: "ready", value: [{ currency: "CNY", balance: 9 }], bonusWallets: [] }; } }
@@ -1418,6 +1433,7 @@ test("last-used Session provider is used when no selection is pending", async ()
 	let credentialCalls = 0;
 	let accountCalls = 0;
 	const route = makeBalanceRoute({
+		projectionContract: "v0.2.0-rc.2",
 		modelSelection: { next: null, lastUsed: { provider: "deepseek-official", model: "last-model" } },
 		credentials: { async resolve() { credentialCalls += 1; return { value: "test-key" }; } },
 		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
@@ -1485,6 +1501,8 @@ test("new Session follows the current global default, including default changes 
 	let accountCalls = 0;
 	let credentialCalls = 0;
 	const route = makeBalanceRoute({
+		projectionContract: "v0.2.1-rc.1",
+		asOfSeq: -1,
 		defaultSelection: () => currentDefault,
 		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } },
 		credentials: { async resolve() { credentialCalls += 1; return { value: "test-key" }; } }
@@ -1592,6 +1610,92 @@ test("unsupported, malformed, and unresolved Session selections fail closed with
 		assert.equal(body.result.value.error, options.error);
 		assert.equal(credentialCalls, 0);
 		assert.equal(accountCalls, 0);
+	}
+});
+
+test("migration-required Session projection hints never influence provider resolution or expose cached selection details", async () => {
+	const originalFetch = globalThis.fetch;
+	const cachedModelSecret = "cached-private-model-7a91";
+	try {
+		let fetchCalls = 0;
+		globalThis.fetch = async () => {
+			fetchCalls += 1;
+			throw new Error("migration-required projections must not dispatch a balance request");
+		};
+		for (const scenario of [
+			{
+				name: "cached official selection",
+				values: { modelSelection: { next: { provider: "deepseek-official", model: cachedModelSecret }, lastUsed: null } }
+			},
+			{
+				name: "cached account selection",
+				values: { modelSelection: { next: { provider: "deepseek-account", model: cachedModelSecret }, lastUsed: null } }
+			},
+			{ name: "no cached selection", values: {} }
+		]) {
+			const calls = { defaults: 0, credentials: 0, account: 0 };
+			const logs = [];
+			const serviceLookups = [];
+			const route = makeBalanceRoute({
+				projectionResponse: { kind: "migration-required", values: scenario.values },
+				defaultReads() { calls.defaults += 1; },
+				credentials: { async resolve() { calls.credentials += 1; return { value: "must-not-resolve" }; } },
+				account: { async getBalance() { calls.account += 1; return { status: "ready", value: [], bonusWallets: [] }; } },
+				logs,
+				serviceLookups
+			});
+			const body = await (await makeRpcRequest(route, VALID_BALANCE_RPC)).json();
+			const value = body.result.value;
+			assert.equal(value.error, "session-projection-migration-required", scenario.name);
+			assert.equal(value.provider, null, scenario.name);
+			assert.deepEqual(calls, { defaults: 0, credentials: 0, account: 0 }, scenario.name);
+			assert.equal(fetchCalls, 0, scenario.name);
+			assert.deepEqual(serviceLookups, ["sessionController"], scenario.name);
+			assert.deepEqual(logs, ["balance query failed: session-projection-migration-required"], scenario.name);
+			assert.doesNotMatch(JSON.stringify(body), /cached-private-model-7a91|must-not-resolve/);
+			assert.doesNotMatch(logs.join("\n"), /cached-private-model-7a91|must-not-resolve/);
+		}
+	} finally {
+		globalThis.fetch = originalFetch;
+	}
+});
+
+test("unknown and malformed Session projection baselines fail closed before provider access", async () => {
+	const validValues = { modelSelection: { next: { provider: "deepseek-official", model: "must-not-use" }, lastUsed: null } };
+	const cases = [
+		{ name: "unknown discriminant", response: { kind: "future", asOfSeq: 1, values: validValues } },
+		{ name: "missing legacy watermark", response: { values: validValues } },
+		{ name: "missing sequenced watermark", response: { kind: "sequenced", values: validValues } },
+		{ name: "negative watermark", response: { kind: "sequenced", asOfSeq: -2, values: validValues } },
+		{ name: "negative zero watermark", response: { asOfSeq: -0, values: validValues } },
+		{ name: "fractional watermark", response: { kind: "sequenced", asOfSeq: 1.5, values: validValues } },
+		{ name: "unsafe watermark", response: { asOfSeq: Number.MAX_SAFE_INTEGER + 1, values: validValues } },
+		{ name: "primitive response container", response: "cached projection" },
+		{ name: "array response container", response: [] },
+		{ name: "missing values container", response: { kind: "sequenced", asOfSeq: 1 } },
+		{ name: "null values container", response: { kind: "sequenced", asOfSeq: 1, values: null } },
+		{ name: "array values container", response: { asOfSeq: 1, values: [] } }
+	];
+	const originalFetch = globalThis.fetch;
+	try {
+		let fetchCalls = 0;
+		globalThis.fetch = async () => { fetchCalls += 1; throw new Error("invalid projections must not dispatch a balance request"); };
+		for (const scenario of cases) {
+			const calls = { defaults: 0, credentials: 0, account: 0 };
+			const route = makeBalanceRoute({
+				projectionResponse: scenario.response,
+				defaultReads() { calls.defaults += 1; },
+				credentials: { async resolve() { calls.credentials += 1; return { value: "must-not-resolve" }; } },
+				account: { async getBalance() { calls.account += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
+			});
+			const body = await (await makeRpcRequest(route, VALID_BALANCE_RPC)).json();
+			assert.equal(body.result.value.error, "session-projection-invalid", scenario.name);
+			assert.equal(body.result.value.provider, null, scenario.name);
+			assert.deepEqual(calls, { defaults: 0, credentials: 0, account: 0 }, scenario.name);
+			assert.equal(fetchCalls, 0, scenario.name);
+		}
+	} finally {
+		globalThis.fetch = originalFetch;
 	}
 });
 

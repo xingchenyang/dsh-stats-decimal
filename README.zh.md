@@ -1,12 +1,12 @@
 # dsh-stats-decimal
 
-[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.2.0--rc.2-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.0-rc.2)
+[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.2.1--rc.1-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.1)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/license-MIT-2EA44F)](LICENSE)
 
 [English](README.md) | 中文
 
-> 本文件是与插件版本 `0.8.4` 对应的中文理解快照。发生冲突时，以英文版 `README.md` 为准；快照版本和同步状态见[本地化清单](docs/localization-manifest.json)。
+> 本文件是与插件版本 `0.8.5` 对应的中文理解快照。发生冲突时，以英文版 `README.md` 为准；快照版本和同步状态见[本地化清单](docs/localization-manifest.json)。
 
 这是一个运行于 DeepSeek Harness Web 会话及 Desktop 应用内嵌 Web 界面的 Cordis 插件。它保留 DSH 原生可展开会话统计，并增加 CNY/USD 费用估算、余额和当前计价时段。费用由 Host 根据会话事件计算。余额通过 Host 侧 RPC 查询，API Key 不会进入浏览器或 Session 日志。
 
@@ -14,7 +14,7 @@
 
 - 保留 DSH 原生 `StatsPills` 的轮次、速度、精确 token 数和缓存命中详情。
 - 独立显示费用和余额账本，不覆盖 DSH 原生 `stats` 项。
-- 显示 CNY/USD 会话累计费用、会话最后一个自然日的费用和所选 provider 的余额。
+- 显示 CNY/USD 会话累计费用、当前客户端本地日期的会话费用和所选 provider 的余额。
 - 在第二行显示当前客户端时区日期的全会话费用估算，包含子代理会话；峰谷计价仍按北京时间。
 - 根据每条事件发生时的历史模型价格、缓存桶、输出 token 及北京时间计价时段重放费用。
 - 显示当前北京时间日期类型和计价时段：工作日高峰/空闲、周末空闲或带名称的法定节假日。界面会显示本地化节日名称。
@@ -33,7 +33,7 @@
 
 ## 兼容性与代码结构
 
-- 当前兼容目标：DeepSeek Harness `v0.2.0-rc.2`（插件 `0.8.4`）。
+- 当前兼容目标：DeepSeek Harness `v0.2.1-rc.1`（插件 `0.8.5`）。
 - 插件使用 projection、slot 和 RPC contract；这不代表兼容其他 DSH 版本。
 - Desktop 使用同一 Web 界面，但拥有独立的 `desktop` profile。安装后需在该 profile 启用费用配置。
 - Web 和 Desktop 的全会话当日估算均支持 DeepSeek API Key（`deepseek-official`）及账户登录（`deepseek-account`）推理方式。Web 使用浏览器 IANA 时区；Desktop 使用内嵌 Web renderer 提供的本地 IANA 时区。估算读取当前 profile 的会话日志，不依赖认证方式。
@@ -113,7 +113,7 @@ dsh plugin --profile web add file:./dsh-stats-decimal
 dsh web
 ~~~
 
-PowerShell 命令相同。`file:./dsh-stats-decimal` 相对于当前 shell 目录解析，而不是相对于 profile 目录。`add` 会将插件写入 profile，并自动加入 `dsh.profile.bundles`，无需手动 insert。公共 `dsh` CLI 不管理官方 Desktop profile。参见 [DSH Desktop 指南](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/apps/desktop/README.zh.md)。
+PowerShell 命令相同。`file:./dsh-stats-decimal` 相对于当前 shell 目录解析，而不是相对于 profile 目录。`add` 会将插件写入 profile，并自动加入 `dsh.profile.bundles`，无需手动 insert。公共 `dsh` CLI 不管理官方 Desktop profile。参见 [DSH Desktop 指南](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.1/apps/desktop/README.zh.md)。
 
 ## 更新与卸载
 
@@ -169,7 +169,7 @@ Desktop 使用 `$DSH_HOME\profiles\desktop\cordis.patch.yml`。文件不存在�
 | `balance.enabled` | `false` | 在启用币种片段中追加余额 |
 | `peakHours` | `[9,10,11,14,15,16,17]` | 北京时间工作日高峰钟点 |
 
-只有 `enableCost=true` 且至少启用一种币时才显示费用行。每种币显示累计金额和会话最后一个自然日的金额；启用余额后还会显示所选 provider 返回的余额。
+只有 `enableCost=true` 且至少启用一种币时才显示费用行。每种币显示累计金额和打开的 Session 在当前客户端时区当天的费用；启用余额后还会显示所选 provider 返回的余额。
 
 全会话当日估算会在页面加载、当前会话的当日费用变化或会话结束后、本地午夜，以及每五分钟兜底时通过 DSH 的 `sessionQuery` 服务读取当前 profile 中的实时和已持久化 Session 日志。Web 浏览器或 Desktop 内嵌 Web renderer 会把 IANA 时区传给 Host，因此日期边界跟随当前客户端/设备时区并适用夏令时变化；客户端无法提供时区时使用 UTC。该日志估算不依赖会话使用 DeepSeek API Key 还是账户登录认证。峰谷计价仍按北京时间。短时间连续发生的用量和会话事件会合并刷新。它汇总每个 Session 自己产生的事件，包含子代理 Session，并排除 fork 继承的事件前缀以免重复计算。若查询服务不可用或任一日志无法读取，界面会显示统计暂不可用；若当天任一事件的价格未知，则显示费用未知。该估算只覆盖当前 DSH profile 的日志，不是官方账户账单；Web 和 Desktop profile 的会话存储互相独立。
 
@@ -227,8 +227,7 @@ overridePricing:
 
 ## 注意事项与许可证
 
-- “今日”按 Session 日志中最后一个自然日统计。打开较早的 Session 时，它可能不是现实中的今天。
-- 全会话当日估算使用 Web 浏览器或 Desktop renderer 的当前 IANA 时区，只覆盖当前 DSH profile 中 `sessionQuery` 可读取的会话。
+- 两行“今日”金额均按当前 Web 浏览器或 Desktop renderer 的 IANA 日历日期统计。第一行覆盖打开的 Session；第二行覆盖当前 DSH profile 中 `sessionQuery` 可读取的所有会话。
 - 费用根据本地 token 用量和价格表估算，最终金额以 DeepSeek 官方账单为准。
 - 余额是独立的官方 API 数据。模型价格未知不会隐藏或改变 DeepSeek 返回的余额。
 - 这是一个独立个人项目，与 DeepSeek、DeepSeek Harness 或 OpenAI 没有隶属、合作或背书关系。部分实现和文档使用了 AI 辅助。项目依据 [MIT License](LICENSE) 发布。
