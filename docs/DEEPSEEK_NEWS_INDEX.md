@@ -6,6 +6,7 @@ The English site without a language prefix is the canonical source. Chinese page
 
 | Date | Topic | Pricing information | Chinese page | English page |
 | --- | --- | --- | --- | --- |
+| 2026-10-17 | DeepSeek-V4.1-Flash-1017 update and Search/Fetch API launch | API model ID deepseek-flash and token prices unchanged; each Search/Fetch endpoint is ¥5 / $0.75 per 1,000 successful requests, with a separate server-side billing start | [Chinese](https://api-docs.deepseek.com/zh-cn/news/news261017/) | [English](https://api-docs.deepseek.com/news/news261017/) |
 | 2026-09-10 | DeepSeek-V4.1-Flash release | States the new Flash prices and effective time | [Chinese](https://api-docs.deepseek.com/zh-cn/news/news260910/) | [English](https://api-docs.deepseek.com/news/news260910/) |
 | 2026-08-21 | DeepSeek-V4-Flash-Vision-Exp launch | States that it has the same price as Flash | [Chinese](https://api-docs.deepseek.com/zh-cn/news/news260821/) | [English](https://api-docs.deepseek.com/news/news260821/) |
 | 2026-08-13 | DeepSeek-V4-Pro general availability | Peak/off-peak price change and exact effective time | [Chinese](https://api-docs.deepseek.com/zh-cn/news/news260813/) | [English](https://api-docs.deepseek.com/news/news260813/) |
@@ -27,8 +28,8 @@ The English site without a language prefix is the canonical source. Chinese page
 
 ## Maintenance
 
-1. Before upgrading the plugin, run `npm run check:upstream` to compare the English canonical page's sidebar.
-2. Review new articles and pages whose content changed, then add confirmed entries to this table.
-3. If an article changes pricing, record the announcement status and effective period in `PRICING_HISTORY.md` and `lib/pricing.js`.
-4. If an article conflicts with the current price table, do not overwrite historical data immediately. Determine whether it describes a future plan, an effective change, or a later withdrawal.
-5. After manual review, run `node scripts/check-deepseek-docs.mjs --snapshot` to generate a candidate baseline, then update `deepseek-docs-baseline.json`.
+1. Before upgrading the plugin, run `npm run check:upstream` to compare official News links, dated `/updates/` entries, model token prices, Search/Fetch request rates, and the server-side billing start.
+2. Review new articles and official price pages, then add confirmed news references to this table.
+3. Record model-token price changes and effective periods in `PRICING_HISTORY.md` and, only when the token price changes, `lib/pricing.js`. Keep Search/Fetch request fees separate from the token ledger.
+4. If an official announcement conflicts with the current price table, do not overwrite historical data immediately. Determine whether it describes a future plan, an effective change, or a later withdrawal.
+5. After manually reviewing every candidate fact and source URL, run `node scripts/check-deepseek-docs.mjs --snapshot`. The command prints a candidate only; update `deepseek-docs-baseline.json` explicitly after review.

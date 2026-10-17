@@ -1,67 +1,435 @@
 {
-  "checkedAt": "2026-09-29T13:42:08.846Z",
+  "schemaVersion": 2,
+  "checkedAt": "2026-10-17T14:54:32.075Z",
   "roots": {
     "zhCN": "https://api-docs.deepseek.com/zh-cn/",
     "en": "https://api-docs.deepseek.com/"
   },
   "queryLocale": "en",
   "newsSeeds": {
-    "zhCN": "https://api-docs.deepseek.com/zh-cn/news/news260910/",
-    "en": "https://api-docs.deepseek.com/news/news260910/"
+    "zhCN": "https://api-docs.deepseek.com/zh-cn/news/news261017/",
+    "en": "https://api-docs.deepseek.com/news/news261017/"
+  },
+  "sources": {
+    "newsDirectory": {
+      "en": "https://api-docs.deepseek.com/news/news261017/",
+      "zhCN": "https://api-docs.deepseek.com/zh-cn/news/news261017/"
+    },
+    "updates": "https://api-docs.deepseek.com/updates/",
+    "tokenPricing": {
+      "en": "https://api-docs.deepseek.com/quick_start/pricing/",
+      "zhCN": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/"
+    },
+    "searchFetchPricing": {
+      "en": "https://api-docs.deepseek.com/quick_start/pricing/",
+      "zhCN": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/",
+      "enGuide": "https://api-docs.deepseek.com/guides/search/",
+      "zhGuide": "https://api-docs.deepseek.com/zh-cn/guides/search/"
+    }
   },
   "news": [
-    { "path": "/news/news260910", "titleEn": "DeepSeek-V4.1-Flash Release 2026/09/10" },
-    { "path": "/news/news260821", "titleEn": "DeepSeek-V4-Flash-Vision-Exp Release 2026/08/21" },
-    { "path": "/news/news260813", "titleEn": "DeepSeek-V4-Pro GA Release 2026/08/13" },
-    { "path": "/news/news260424", "titleEn": "DeepSeek-V4 Preview Release 2026/04/24" },
-    { "path": "/news/news251201", "titleEn": "DeepSeek-V3.2 Release 2025/12/01" },
-    { "path": "/news/news250929", "titleEn": "DeepSeek-V3.2-Exp Release 2025/09/29" },
-    { "path": "/news/news250922", "titleEn": "DeepSeek V3.1 Update 2025/09/22" },
-    { "path": "/news/news250821", "titleEn": "DeepSeek V3.1 Release 2025/08/21" },
-    { "path": "/news/news250528", "titleEn": "DeepSeek-R1-0528 Release 2025/05/28" },
-    { "path": "/news/news250325", "titleEn": "DeepSeek-V3-0324 Release 2025/03/25" },
-    { "path": "/news/news250120", "titleEn": "DeepSeek-R1 Release 2025/01/20" },
-    { "path": "/news/news250115", "titleEn": "DeepSeek APP 2025/01/15" },
-    { "path": "/news/news1226", "titleEn": "Introducing DeepSeek-V3 2024/12/26" },
-    { "path": "/news/news1210", "titleEn": "DeepSeek-V2.5-1210 Release 2024/12/10" },
-    { "path": "/news/news1120", "titleEn": "DeepSeek-R1-Lite Release 2024/11/20" },
-    { "path": "/news/news0905", "titleEn": "DeepSeek-V2.5 Release 2024/09/05" },
-    { "path": "/news/news0802", "titleEn": "Context Caching is Available 2024/08/02" },
-    { "path": "/news/news0725", "titleEn": "New API Features 2024/07/25" }
+    {
+      "path": "/news/news261017",
+      "titleEn": "DeepSeek-V4.1-Flash-1017 Release 2026/10/17"
+    },
+    {
+      "path": "/news/news260910",
+      "titleEn": "DeepSeek-V4.1-Flash Release 2026/09/10"
+    },
+    {
+      "path": "/news/news260821",
+      "titleEn": "DeepSeek-V4-Flash-Vision-Exp Release 2026/08/21"
+    },
+    {
+      "path": "/news/news260813",
+      "titleEn": "DeepSeek-V4-Pro GA Release 2026/08/13"
+    },
+    {
+      "path": "/news/news260424",
+      "titleEn": "DeepSeek-V4 Preview Release 2026/04/24"
+    },
+    {
+      "path": "/news/news251201",
+      "titleEn": "DeepSeek-V3.2 Release 2025/12/01"
+    },
+    {
+      "path": "/news/news250929",
+      "titleEn": "DeepSeek-V3.2-Exp Release 2025/09/29"
+    },
+    {
+      "path": "/news/news250922",
+      "titleEn": "DeepSeek V3.1 Update 2025/09/22"
+    },
+    {
+      "path": "/news/news250821",
+      "titleEn": "DeepSeek V3.1 Release 2025/08/21"
+    },
+    {
+      "path": "/news/news250528",
+      "titleEn": "DeepSeek-R1-0528 Release 2025/05/28"
+    },
+    {
+      "path": "/news/news250325",
+      "titleEn": "DeepSeek-V3-0324 Release 2025/03/25"
+    },
+    {
+      "path": "/news/news250120",
+      "titleEn": "DeepSeek-R1 Release 2025/01/20"
+    },
+    {
+      "path": "/news/news250115",
+      "titleEn": "DeepSeek APP 2025/01/15"
+    },
+    {
+      "path": "/news/news1226",
+      "titleEn": "Introducing DeepSeek-V3 2024/12/26"
+    },
+    {
+      "path": "/news/news1210",
+      "titleEn": "DeepSeek-V2.5-1210 Release 2024/12/10"
+    },
+    {
+      "path": "/news/news1120",
+      "titleEn": "DeepSeek-R1-Lite Release 2024/11/20"
+    },
+    {
+      "path": "/news/news0905",
+      "titleEn": "DeepSeek-V2.5 Release 2024/09/05"
+    },
+    {
+      "path": "/news/news0802",
+      "titleEn": "Context Caching is Available 2024/08/02"
+    },
+    {
+      "path": "/news/news0725",
+      "titleEn": "New API Features 2024/07/25"
+    }
   ],
+  "updates": [
+    {
+      "date": "2026-10-17",
+      "title": "Opening up the in-house search API"
+    },
+    {
+      "date": "2026-10-17",
+      "title": "DeepSeek-V4.1-Flash-1017 Update"
+    },
+    {
+      "date": "2026-09-10",
+      "title": "DeepSeek-V4.1-Flash Release"
+    },
+    {
+      "date": "2026-08-21",
+      "title": "DeepSeek-V4-Flash-Vision-Exp Release"
+    },
+    {
+      "date": "2026-08-13",
+      "title": "DeepSeek-V4-Pro Update"
+    },
+    {
+      "date": "2026-07-31",
+      "title": "DeepSeek-V4-Flash Update"
+    },
+    {
+      "date": "2026-04-24",
+      "title": "DeepSeek-V4"
+    },
+    {
+      "date": "2025-12-01",
+      "title": "DeepSeek-V3.2"
+    },
+    {
+      "date": "2025-12-01",
+      "title": "DeepSeek-V3.2-Speciale"
+    },
+    {
+      "date": "2025-09-29",
+      "title": "DeepSeek-V3.2-Exp"
+    },
+    {
+      "date": "2025-09-22",
+      "title": "DeepSeek-V3.1-Terminus"
+    },
+    {
+      "date": "2025-08-21",
+      "title": "DeepSeek-V3.1"
+    },
+    {
+      "date": "2025-05-28",
+      "title": "deepseek-reasoner"
+    },
+    {
+      "date": "2025-03-24",
+      "title": "deepseek-chat"
+    },
+    {
+      "date": "2025-01-20",
+      "title": "deepseek-reasoner"
+    },
+    {
+      "date": "2024-12-26",
+      "title": "deepseek-chat"
+    },
+    {
+      "date": "2024-12-10",
+      "title": "deepseek-chat"
+    },
+    {
+      "date": "2024-09-05",
+      "title": "deepseek-coder & deepseek-chat Upgraded to DeepSeek V2.5 Model"
+    },
+    {
+      "date": "2024-08-02",
+      "title": "API Launches Context Caching on Disk Technology"
+    },
+    {
+      "date": "2024-07-25",
+      "title": "New API Features"
+    },
+    {
+      "date": "2024-07-24",
+      "title": "deepseek-coder"
+    },
+    {
+      "date": "2024-06-28",
+      "title": "deepseek-chat"
+    },
+    {
+      "date": "2024-06-14",
+      "title": "deepseek-coder"
+    },
+    {
+      "date": "2024-05-17",
+      "title": "deepseek-chat"
+    }
+  ],
+  "tokenPricing": {
+    "unit": "per 1M tokens",
+    "models": {
+      "deepseek-flash": {
+        "modelVersion": "DeepSeek-V4.1-Flash-1017",
+        "cny": {
+          "cacheHit": {
+            "offPeak": 0.02,
+            "peak": 0.04
+          },
+          "cacheMiss": {
+            "offPeak": 1,
+            "peak": 2
+          },
+          "output": {
+            "offPeak": 4,
+            "peak": 8
+          }
+        },
+        "usd": {
+          "cacheHit": {
+            "offPeak": 0.003,
+            "peak": 0.006
+          },
+          "cacheMiss": {
+            "offPeak": 0.15,
+            "peak": 0.3
+          },
+          "output": {
+            "offPeak": 0.6,
+            "peak": 1.2
+          }
+        }
+      },
+      "deepseek-v4-pro": {
+        "modelVersion": "DeepSeek-V4-Pro-0813",
+        "cny": {
+          "cacheHit": {
+            "offPeak": 0.15,
+            "peak": 0.3
+          },
+          "cacheMiss": {
+            "offPeak": 4.5,
+            "peak": 9
+          },
+          "output": {
+            "offPeak": 13.5,
+            "peak": 27
+          }
+        },
+        "usd": {
+          "cacheHit": {
+            "offPeak": 0.022,
+            "peak": 0.044
+          },
+          "cacheMiss": {
+            "offPeak": 0.66,
+            "peak": 1.32
+          },
+          "output": {
+            "offPeak": 1.98,
+            "peak": 3.96
+          }
+        }
+      }
+    },
+    "sources": {
+      "en": "https://api-docs.deepseek.com/quick_start/pricing/",
+      "zhCN": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/"
+    }
+  },
+  "searchFetchPricing": {
+    "unit": "per 1,000 successful requests",
+    "apis": {
+      "search": {
+        "cny": 5,
+        "usd": 0.75
+      },
+      "fetch": {
+        "cny": 5,
+        "usd": 0.75
+      }
+    },
+    "dshServerSideToolsBillableFrom": "2026-11-01T00:00:00+08:00",
+    "sources": {
+      "enPricing": "https://api-docs.deepseek.com/quick_start/pricing/",
+      "zhPricing": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/",
+      "enGuide": "https://api-docs.deepseek.com/guides/search/",
+      "zhGuide": "https://api-docs.deepseek.com/zh-cn/guides/search/"
+    }
+  },
   "sidebar": [
-    { "href": "/", "title": "Your First API Call" },
-    { "href": "/quick_start/pricing", "title": "Models & Pricing" },
-    { "href": "/quick_start/token_usage", "title": "Token & Token Usage" },
-    { "href": "/quick_start/rate_limit", "title": "Rate Limit & Isolation" },
-    { "href": "/quick_start/error_codes", "title": "Error Codes" },
-    { "href": "https://deepseek-harness.github.io/deepseek-harness/en/guide/quickstart", "title": "DeepSeek Harness" },
-    { "href": "/quick_start/agent_integrations/claude_code", "title": "Claude Code" },
-    { "href": "/quick_start/agent_integrations/codex", "title": "Codex" },
-    { "href": "/quick_start/agent_integrations/opencode", "title": "OpenCode" },
-    { "href": "/quick_start/agent_integrations/openclaw", "title": "OpenClaw" },
-    { "href": "/quick_start/agent_integrations/hermes", "title": "Hermes" },
-    { "href": "/quick_start/agent_integrations/reasonix", "title": "Reasonix" },
-    { "href": "/quick_start/agent_integrations/workbuddy", "title": "WorkBuddy/CodeBuddy" },
-    { "href": "/quick_start/agent_integrations/qoder", "title": "Qoder" },
-    { "href": "https://github.com/deepseek-ai/awesome-deepseek-agent/tree/main", "title": "Contribute Your Agent Integrations" },
-    { "href": "/news/news260910", "title": "DeepSeek-V4.1-Flash Release 2026/09/10" },
-    { "href": "/news/news260821", "title": "DeepSeek-V4-Flash-Vision-Exp Release 2026/08/21" },
-    { "href": "/news/news260813", "title": "DeepSeek-V4-Pro GA Release 2026/08/13" },
-    { "href": "/news/news260424", "title": "DeepSeek-V4 Preview Release 2026/04/24" },
-    { "href": "/news/news251201", "title": "DeepSeek-V3.2 Release 2025/12/01" },
-    { "href": "/news/news250929", "title": "DeepSeek-V3.2-Exp Release 2025/09/29" },
-    { "href": "/news/news250922", "title": "DeepSeek V3.1 Update 2025/09/22" },
-    { "href": "/news/news250821", "title": "DeepSeek V3.1 Release 2025/08/21" },
-    { "href": "/news/news250528", "title": "DeepSeek-R1-0528 Release 2025/05/28" },
-    { "href": "/news/news250325", "title": "DeepSeek-V3-0324 Release 2025/03/25" },
-    { "href": "/news/news250120", "title": "DeepSeek-R1 Release 2025/01/20" },
-    { "href": "/news/news250115", "title": "DeepSeek APP 2025/01/15" },
-    { "href": "/news/news1226", "title": "Introducing DeepSeek-V3 2024/12/26" },
-    { "href": "/news/news1210", "title": "DeepSeek-V2.5-1210 Release 2024/12/10" },
-    { "href": "/news/news1120", "title": "DeepSeek-R1-Lite Release 2024/11/20" },
-    { "href": "/news/news0905", "title": "DeepSeek-V2.5 Release 2024/09/05" },
-    { "href": "/news/news0802", "title": "Context Caching is Available 2024/08/02" },
-    { "href": "/news/news0725", "title": "New API Features 2024/07/25" }
+    {
+      "href": "/",
+      "title": "Your First API Call"
+    },
+    {
+      "href": "/quick_start/pricing",
+      "title": "Models & Pricing"
+    },
+    {
+      "href": "/quick_start/token_usage",
+      "title": "Token & Token Usage"
+    },
+    {
+      "href": "/quick_start/rate_limit",
+      "title": "Rate Limit & Isolation"
+    },
+    {
+      "href": "/quick_start/error_codes",
+      "title": "Error Codes"
+    },
+    {
+      "href": "https://deepseek-harness.github.io/deepseek-harness/en/guide/quickstart",
+      "title": "DeepSeek Harness"
+    },
+    {
+      "href": "/quick_start/agent_integrations/claude_code",
+      "title": "Claude Code"
+    },
+    {
+      "href": "/quick_start/agent_integrations/codex",
+      "title": "Codex"
+    },
+    {
+      "href": "/quick_start/agent_integrations/opencode",
+      "title": "OpenCode"
+    },
+    {
+      "href": "/quick_start/agent_integrations/openclaw",
+      "title": "OpenClaw"
+    },
+    {
+      "href": "/quick_start/agent_integrations/hermes",
+      "title": "Hermes"
+    },
+    {
+      "href": "/quick_start/agent_integrations/reasonix",
+      "title": "Reasonix"
+    },
+    {
+      "href": "/quick_start/agent_integrations/workbuddy",
+      "title": "WorkBuddy/CodeBuddy"
+    },
+    {
+      "href": "/quick_start/agent_integrations/qoder",
+      "title": "Qoder"
+    },
+    {
+      "href": "https://github.com/deepseek-ai/awesome-deepseek-agent/tree/main",
+      "title": "Contribute Your Agent Integrations"
+    },
+    {
+      "href": "/news/news261017",
+      "title": "DeepSeek-V4.1-Flash-1017 Release 2026/10/17"
+    },
+    {
+      "href": "/news/news260910",
+      "title": "DeepSeek-V4.1-Flash Release 2026/09/10"
+    },
+    {
+      "href": "/news/news260821",
+      "title": "DeepSeek-V4-Flash-Vision-Exp Release 2026/08/21"
+    },
+    {
+      "href": "/news/news260813",
+      "title": "DeepSeek-V4-Pro GA Release 2026/08/13"
+    },
+    {
+      "href": "/news/news260424",
+      "title": "DeepSeek-V4 Preview Release 2026/04/24"
+    },
+    {
+      "href": "/news/news251201",
+      "title": "DeepSeek-V3.2 Release 2025/12/01"
+    },
+    {
+      "href": "/news/news250929",
+      "title": "DeepSeek-V3.2-Exp Release 2025/09/29"
+    },
+    {
+      "href": "/news/news250922",
+      "title": "DeepSeek V3.1 Update 2025/09/22"
+    },
+    {
+      "href": "/news/news250821",
+      "title": "DeepSeek V3.1 Release 2025/08/21"
+    },
+    {
+      "href": "/news/news250528",
+      "title": "DeepSeek-R1-0528 Release 2025/05/28"
+    },
+    {
+      "href": "/news/news250325",
+      "title": "DeepSeek-V3-0324 Release 2025/03/25"
+    },
+    {
+      "href": "/news/news250120",
+      "title": "DeepSeek-R1 Release 2025/01/20"
+    },
+    {
+      "href": "/news/news250115",
+      "title": "DeepSeek APP 2025/01/15"
+    },
+    {
+      "href": "/news/news1226",
+      "title": "Introducing DeepSeek-V3 2024/12/26"
+    },
+    {
+      "href": "/news/news1210",
+      "title": "DeepSeek-V2.5-1210 Release 2024/12/10"
+    },
+    {
+      "href": "/news/news1120",
+      "title": "DeepSeek-R1-Lite Release 2024/11/20"
+    },
+    {
+      "href": "/news/news0905",
+      "title": "DeepSeek-V2.5 Release 2024/09/05"
+    },
+    {
+      "href": "/news/news0802",
+      "title": "Context Caching is Available 2024/08/02"
+    },
+    {
+      "href": "/news/news0725",
+      "title": "New API Features 2024/07/25"
+    }
   ]
 }

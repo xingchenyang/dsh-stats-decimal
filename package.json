@@ -1,11 +1,11 @@
 {
   "name": "dsh-stats-decimal",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "type": "module",
   "main": "lib/index.js",
-  "description": "DSH v0.2.1-rc.1 plugin: preserves native StatsPills and adds CNY/USD cost, all-session daily totals, balance, and Beijing date-type pricing status.",
+  "description": "DeepSeek Harness plugin (minimum host v0.2.1-rc.1; latest runtime observed on v0.2.1-rc.2): preserves native StatsPills and adds CNY/USD cost, all-session daily totals, balance, and Beijing date-type pricing status.",
   "engines": {
-    "dsh": "=0.2.1-rc.1"
+    "dsh": ">=0.2.1-rc.1"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.4",

@@ -1,6 +1,6 @@
 # DeepSeek API Price History
 
-This file records the evidence, timestamp precision, and announcement status for the price periods built into `lib/pricing.js`. It supports historical Session pricing and documents the data planned for a future price-history step chart.
+This file records the evidence, timestamp precision, and announcement status for model token-price periods built into `lib/pricing.js`. It separately records Search and Fetch request fees, which are not part of the Session token-cost projection.
 
 ## Official references
 
@@ -25,6 +25,16 @@ The following price events were confirmed from individual news articles and stor
 | 2025-09-29 | V3.2-Exp API prices cut by more than 50% immediately | Date-precision announcement recorded; exact prices appear in an official image and are excluded from the billing table until image evidence is captured |
 
 Rate order is cache hit / cache miss / output. Record a complete three-rate tuple only when the article explicitly provides all three prices.
+
+## Search and Fetch request fees
+
+On 2026-10-17, DeepSeek opened the Search and Fetch APIs as standalone request-priced services. Each endpoint is priced at **¥5 per 1,000 successful requests** on the Chinese pricing page and **$0.75 per 1,000 successful requests** on the English pricing page. The fee applies separately to Search and Fetch. The [official guide](https://api-docs.deepseek.com/zh-cn/guides/search/) describes a billable success as an HTTP 200 response with nonempty Search results or Fetch page content; empty results, failed requests, and timeouts are not billed.
+
+The direct Search and Fetch API requests are priced per successful request. The temporary free period applies specifically to DeepSeek API users' server-side Search/Fetch tool calls through DeepSeek Harness, Claude Code, and Codex. The official pricing pages set that billing start to **2026-11-01 00:00 Beijing time (UTC+8)**, equivalent to **2026-10-31 16:00 UTC** in the English [release article](https://api-docs.deepseek.com/news/news261017/). The paired sources are the [Chinese pricing page](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/), [English pricing page](https://api-docs.deepseek.com/quick_start/pricing/), and [Chinese release article](https://api-docs.deepseek.com/zh-cn/news/news261017/).
+
+The 2026-10-17 V4.1-Flash-1017 serving update does not change token billing: continue using API model ID `deepseek-flash` at the existing Flash token prices. It does not create a new token-price period.
+
+The plugin's Session estimate covers model token usage only. RC2 Session records do not provide a durable count of billable Search/Fetch successes, so these request fees are not estimated or added to the ledger.
 
 ## Billing periods
 

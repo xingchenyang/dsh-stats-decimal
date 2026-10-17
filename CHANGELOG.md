@@ -4,6 +4,15 @@ This file records user-visible changes. For development context and technical de
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.6] - 2026-10-17
+
+### Changed
+
+- Set the minimum DeepSeek Harness version to `>=0.2.1-rc.1`; `v0.2.1-rc.2` remains the latest observed working runtime.
+- Refresh official DeepSeek news and pricing references for the V4.1-Flash-1017 serving update and Search/Fetch request fees.
+- Harden the upstream documentation checker against unrecognized request charges, ambiguous or duplicate token-price rows, ambiguous billing-start markers, and invalid dates; add offline parser and CLI exit-status regression tests.
+- Clarify that Session cost estimates cover model token usage and do not include Search/Fetch request fees.
+
 ## [0.8.5] - 2026-10-17
 
 ### Changed

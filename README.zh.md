@@ -1,12 +1,12 @@
 # dsh-stats-decimal
 
-[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.2.1--rc.1-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.1)
+[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.2.1--rc.2-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.2)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/license-MIT-2EA44F)](LICENSE)
 
 [English](README.md) | 中文
 
-> 本文件是与插件版本 `0.8.5` 对应的中文理解快照。发生冲突时，以英文版 `README.md` 为准；快照版本和同步状态见[本地化清单](docs/localization-manifest.json)。
+> 本文件是与插件版本 `0.8.6` 对应的中文理解快照。发生冲突时，以英文版 `README.md` 为准；快照版本和同步状态见[本地化清单](docs/localization-manifest.json)。
 
 这是一个运行于 DeepSeek Harness Web 会话及 Desktop 应用内嵌 Web 界面的 Cordis 插件。它保留 DSH 原生可展开会话统计，并增加 CNY/USD 费用估算、余额和当前计价时段。费用由 Host 根据会话事件计算。余额通过 Host 侧 RPC 查询，API Key 不会进入浏览器或 Session 日志。
 
@@ -33,8 +33,9 @@
 
 ## 兼容性与代码结构
 
-- 当前兼容目标：DeepSeek Harness `v0.2.1-rc.1`（插件 `0.8.5`）。
-- 插件使用 projection、slot 和 RPC contract；这不代表兼容其他 DSH 版本。
+- 最低 Host 要求：DeepSeek Harness `v0.2.1-rc.1` 或更高版本（插件 `0.8.6`）。最新观察到可运行的版本为 `v0.2.1-rc.2`。
+- 版本范围允许加载并不表示更高版本已通过运行时资格验证。RC.1 的资格结论仍仅适用于原测试范围；只有引入必需的 Host 能力或证实存在不兼容时，才提高最低版本。
+- 插件使用 projection、slot 和 RPC contract；这不代表兼容资格记录以外的 DSH 版本。
 - Desktop 使用同一 Web 界面，但拥有独立的 `desktop` profile。安装后需在该 profile 启用费用配置。
 - Web 和 Desktop 的全会话当日估算均支持 DeepSeek API Key（`deepseek-official`）及账户登录（`deepseek-account`）推理方式。Web 使用浏览器 IANA 时区；Desktop 使用内嵌 Web renderer 提供的本地 IANA 时区。估算读取当前 profile 的会话日志，不依赖认证方式。
 - 插件使用 ESM JavaScript，依赖 `@deepseek-ai/schemastery` 和 `zod`。
@@ -113,7 +114,7 @@ dsh plugin --profile web add file:./dsh-stats-decimal
 dsh web
 ~~~
 
-PowerShell 命令相同。`file:./dsh-stats-decimal` 相对于当前 shell 目录解析，而不是相对于 profile 目录。`add` 会将插件写入 profile，并自动加入 `dsh.profile.bundles`，无需手动 insert。公共 `dsh` CLI 不管理官方 Desktop profile。参见 [DSH Desktop 指南](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.1/apps/desktop/README.zh.md)。
+PowerShell 命令相同。`file:./dsh-stats-decimal` 相对于当前 shell 目录解析，而不是相对于 profile 目录。`add` 会将插件写入 profile，并自动加入 `dsh.profile.bundles`，无需手动 insert。公共 `dsh` CLI 不管理官方 Desktop profile。参见 [DSH Desktop 指南](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.2/apps/desktop/README.zh.md)。
 
 ## 更新与卸载
 
@@ -193,7 +194,7 @@ Desktop 使用 `$DSH_HOME\profiles\desktop\cordis.patch.yml`。文件不存在�
 - `deepseek-v4-pro`
 - `deepseek-v4-flash-vision-exp`（与 Flash 同价）
 
-两个旧 Flash 名称仍可调用，但由 DeepSeek-V4.1-Flash 提供服务并按当前 Flash 价格计费，因此三个 Flash ID 当前价格相同。历史会话按每条消息时间选择当时生效的价格。若模型当时尚未发布，或历史价格资料不完整，则费用未知；不会用当前价格倒推。
+两个旧 Flash 名称仍可调用，但由 DeepSeek-V4.1-Flash-1017 提供服务并按当前 Flash 价格计费，因此三个 Flash ID 当前价格相同。历史会话按每条消息时间选择当时生效的价格。若模型当时尚未发布，或历史价格资料不完整，则费用未知；不会用当前价格倒推。
 
 历史价格和公告依据见[价格历史档案](docs/PRICING_HISTORY.md)。2026-09-14 将 Pro 路由到 Flash 的计划已撤回，不构成计价边界；`deepseek-v4-pro` 继续使用 Pro 价格。
 
@@ -228,7 +229,7 @@ overridePricing:
 ## 注意事项与许可证
 
 - 两行“今日”金额均按当前 Web 浏览器或 Desktop renderer 的 IANA 日历日期统计。第一行覆盖打开的 Session；第二行覆盖当前 DSH profile 中 `sessionQuery` 可读取的所有会话。
-- 费用根据本地 token 用量和价格表估算，最终金额以 DeepSeek 官方账单为准。
+- 费用仅根据模型 token 用量和价格表估算，不包含 Search/Fetch 请求费用。直接调用 Search 或 Fetch API 时，每 1,000 次成功请求各为 ¥5 / $0.75；DeepSeek Harness、Claude Code 和 Codex 的服务端 Search/Fetch 调用目前免费，官方公告称自北京时间 2026-11-01 00:00（UTC+8）起计费。本插件无法从 Session 日志统计可计费的 Search/Fetch 请求。详见[价格历史档案](docs/PRICING_HISTORY.md)。最终金额以 DeepSeek 官方账单为准。
 - 余额是独立的官方 API 数据。模型价格未知不会隐藏或改变 DeepSeek 返回的余额。
 - 这是一个独立个人项目，与 DeepSeek、DeepSeek Harness 或 OpenAI 没有隶属、合作或背书关系。部分实现和文档使用了 AI 辅助。项目依据 [MIT License](LICENSE) 发布。
 

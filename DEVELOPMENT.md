@@ -4,19 +4,21 @@ This guide records technical context, key decisions, and handoff information. In
 
 ## Current status
 
-- Compatibility target: DeepSeek Harness `v0.2.1-rc.1` (official release commit `1600d8a1e140dcde43a1a0941940a0480712c011`). Version `0.8.5` declares only `engines.dsh: "=0.2.1-rc.1"`.
+- Minimum required Host: DeepSeek Harness `>=0.2.1-rc.1`. The latest observed working runtime is `v0.2.1-rc.2` (official release commit `687f282e8625c6b8d11ff58211a90524be2e4317`); package `0.8.6` declares `engines.dsh: ">=0.2.1-rc.1"`.
 - Desktop loads the full Web application through Electron but has its own `$DSH_HOME/profiles/desktop`, plugin package-manager state, and bundled pnpm, isolated from the Web profile. `dsh.client.platform: "web"` applies to the embedded Web interface. The daily estimate uses the renderer's IANA time zone and provider-neutral Session logs in either surface, for both the DeepSeek API-key and account-login routes. Manage Web plugins with `dsh plugin --profile web`; manage Desktop plugins from the app's Plugins page and configure the Desktop profile separately.
-- Upstream reference: [DSH v0.2.1-rc.1 release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.1) (commit `1600d8a1e140dcde43a1a0941940a0480712c011`).
+- Upstream reference: [DSH v0.2.1-rc.2 release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.2) (commit `687f282e8625c6b8d11ff58211a90524be2e4317`).
 - Stack: ESM JavaScript, Cordis Host/Web bundles, `@deepseek-ai/schemastery`, and `zod`.
 - The billing projection version is `stateVersion: 7`. Version 5 added statutory-holiday date spans; version 6 added localized holiday names; version 7 changes how reported cache-write usage is priced and refolds prior sessions.
+- Session cost estimates cover model token usage only. Search and Fetch request fees are not included because RC2 Session records do not provide durable counts of billable successful requests. See [Search and Fetch pricing history](docs/PRICING_HISTORY.md).
 - For a GitHub installation, Desktop's profile package manager installs the dependencies declared by the plugin. Restart Desktop after installing or updating. To update an installed GitHub plugin, submit the same URL again through Add Plugin.
 - A Desktop local-directory installation is recorded as `link:` and does not install dependencies into the linked directory. Install the declared runtime dependencies in the repository before using this development path. The public `dsh` CLI does not manage the Desktop profile.
 
 ## Compatibility qualification
 
-- DSH `v0.2.1-rc.1` is the sole compatibility target for plugin `0.8.5`. The pinned [plugin-compatibility implementation](https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/1600d8a1e140dcde43a1a0941940a0480712c011/packages/boot/app-boot/src/plugin-compatibility.ts) uses `semver.satisfies(runtimeVersion, range, { includePrerelease: true })`; when `engines.dsh` exists, it decides alone and DSH peers are ignored. The exact range admits only `0.2.1-rc.1`; no DSH peer dependency is added.
-- Gate B1 accepted RC.1 source, regression, and isolated synthetic usage/UI qualification. The runtime check exercised candidate loading, a valid usage-bearing persisted Session, billing projection, authenticated daily-cost RPC, and plugin disable/re-enable/restart. Balance-provider runtime behavior, real inference or credentials, normal-width browser layout, and graceful shutdown were not established by that usage qualification.
-- DSH `v0.2.0-rc.2` is not in the `0.8.5` compatibility range. Its pinned source-contract and regression checks were accepted, but runtime qualification remains **NOT TESTED**. During that qualification, [an upstream report](https://github.com/deepseek-ai/deepseek-harness/discussions/8257) raised a possible publication gap for `@deepseek-ai/dsh-client-ui-settings-account@0.2.0-rc.2`; local registry access was inconclusive. This records the historical qualification limitation and does not assert the package's current registry status. It is not an outstanding release gate under the accepted Gate B1 scope.
+- The minimum is the earliest qualified Host contract required by the plugin, not the latest tested DSH version. The pinned [plugin-compatibility implementation](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/boot/app-boot/src/plugin-compatibility.ts) uses `semver.satisfies(runtimeVersion, range, { includePrerelease: true })`; when `engines.dsh` exists, it decides alone and DSH peers are ignored. Under that exact predicate, `>=0.2.1-rc.1` rejects `0.2.0-rc.2` and `0.2.1-rc.0`, and admits `0.2.1-rc.1`, `0.2.1-rc.2`, later RCs, stable `0.2.1`, and later versions. This is permission to load, not a claim that future DSH versions are runtime-qualified; no DSH peer dependency is added.
+- RC2 is the latest observed working runtime. Historical 0.8.5 Gate B1 RC1 runtime qualification remains applicable only to its original tested scope. Later versions admitted by the range are not automatically qualified. Raise the minimum only when a required Host capability is introduced or an actual incompatibility justifies excluding an earlier version.
+- Historical 0.8.5 Gate B1 accepted RC1 source, regression, and isolated synthetic usage/UI qualification. That runtime check exercised candidate loading, a valid usage-bearing persisted Session, billing projection, authenticated daily-cost RPC, and plugin disable/re-enable/restart. Balance-provider runtime behavior, real inference or credentials, normal-width browser layout, and graceful shutdown were not established by that qualification.
+- The older DSH `v0.2.0-rc.2` source-contract and regression checks were accepted, but runtime qualification remained **NOT TESTED**. During that historical qualification, [an upstream report](https://github.com/deepseek-ai/deepseek-harness/discussions/8257) raised a possible publication gap for `@deepseek-ai/dsh-client-ui-settings-account@0.2.0-rc.2`; local registry access was inconclusive. This does not assert the package's current registry status and is not a current 0.8.6 release gate.
 
 ## Architecture and data flow
 
@@ -43,7 +45,7 @@ Balance is not written to the Session. Session logs reject unknown event types, 
 - `cordis.patch.yml`: Cordis bundle registration entry.
 - `package.json`: Host runtime dependencies. A Desktop local `link:` installation requires dependencies in the linked source directory; a GitHub installation lets the Desktop profile's pnpm resolve and install them.
 - `scripts/reload-plugin.mjs`: Removes and reinstalls the `file:` plugin snapshot.
-- `scripts/check-deepseek-docs.mjs`: Extracts the English canonical sidebar from DeepSeek pages and compares it with the repository baseline.
+- `scripts/check-deepseek-docs.mjs`: Compares official News entries, dated English updates, normalized English/Chinese token prices, Search/Fetch request prices and billing start, plus the existing navigation baseline.
 - `scripts/check-language-policy.mjs`: Checks English engineering prose while respecting documented localization, source-data, and example exceptions.
 - `README.md`, `README.zh.md`, `CHANGELOG.md`, and `AGENTS.md`: User instructions, the Chinese release-scoped README snapshot, release history, and repository maintenance rules.
 
@@ -142,18 +144,22 @@ A Desktop manual check must install through the Desktop app's Add Plugin flow in
 
 ## Release checks
 
-1. Run `npm run check:upstream`. If the English canonical sidebar changes, open new pages and manually verify prices, effective times, and announcement status before updating the baseline.
+1. Run `npm run check:upstream`. Review any detected News, dated update, token-price, Search/Fetch price, billing-start, or navigation changes against their official source pages before updating the baseline.
 2. Choose the release version and date:
    - Update the version in `package.json`.
    - Add the matching release section to `CHANGELOG.md`.
    - Update `README.md` only when installation, configuration, compatibility, or current usage changes.
    - Update this guide when architecture, limitations, key decisions, or maintenance steps change.
    - Update `AGENTS.md` only when repository maintenance requirements change.
-3. Verify the DSH projection, slot, locale, and RPC contracts; do not broaden compatibility based on assumptions.
+3. Verify the `engines.dsh` minimum-version matrix using the pinned RC2 compatibility predicate (`semver.satisfies(runtimeVersion, range, { includePrerelease: true })`): reject `0.2.0-rc.2` and `0.2.1-rc.0`; admit `0.2.1-rc.1`, `0.2.1-rc.2`, later RCs, stable `0.2.1`, and later versions. Also verify the DSH projection, slot, locale, and RPC contracts before claiming a runtime qualification.
 4. Run the existing Node test suite, syntax checks, pricing regression checks, the language-policy check, and `git diff --check`.
 5. Synchronize `README.zh.md` with the canonical README for the release. Confirm its version matches `package.json` and record the synchronization in `docs/localization-manifest.json`. A release is incomplete until this check passes.
 6. Reinstall into a test profile and check native StatsPills, the separate billing row, pricing-period status, unknown models, and both DSH account states with and without an API key present.
-7. Check Git for credentials, local configuration, caches, and temporary artifacts before creating a tag or release.
+7. Check Git for credentials, local configuration, caches, and temporary artifacts before creating the single local candidate commit. Do not create a Git tag or GitHub Release while DSH stable is unavailable.
+
+### Publication policy
+
+Maintain one active main branch. The engine range expresses the minimum Host contract, while the qualification record separately states the latest observed working runtime and each tested scope. A new DSH RC does not by itself require a new plugin release. Keep bounded release work in one local, amendable candidate commit. Do not create Git tags or GitHub Releases. After Architecture approval, the user performs any manual remote push.
 
 ### Upstream documentation check
 
@@ -162,9 +168,13 @@ npm run check:upstream
 node scripts/check-deepseek-docs.mjs --snapshot
 ~~~
 
-The default command reads `docs/deepseek-docs-baseline.json` and reports differences. It discovers the newest News entry from the English home page, extracts the API documentation sidebar from the current English Models & Pricing page, and extracts the separate News sidebar from the newest article. It compares the union so a category page's partial sidebar is not mistaken for removal of links still used elsewhere. Chinese URLs are derived by adding `/zh-cn` to the canonical path; the script does not fetch a second navigation tree. `--snapshot` prints a structured candidate snapshot for manual review and baseline updates. The script does not fetch article bodies or update `PRICE_HISTORY` automatically.
+The default command reads docs/deepseek-docs-baseline.json and compares normalized official facts. It discovers News from the English home page and combines the API documentation sidebar from the English Models & Pricing page with the separate News sidebar from the newest article. It also extracts dated entries from the English /updates/ page, Flash and Pro model-version/token-price rows from the English and Chinese pricing pages, and Search/Fetch request rates plus the server-side billing-start marker from both pricing pages. It checks that bilingual prices and effective times agree. Unknown request-charge categories with parseable facts always produce exit 2, including after their labels appear in a local baseline; malformed charge rows, unknown token-price metrics, duplicate metric/band rows (even with matching values), incomplete tuples, ambiguous tables or billing markers, and invalid calendar dates fail with exit 1. It exits 0 only when supported facts match, 2 when a semantic change or baseline migration is detected, and 1 for network, parsing, or required-field failures. A legacy sidebar-only baseline is recognized as requiring explicit v2 migration.
+
+The --snapshot option prints a structured candidate containing source URLs and current normalized facts; it never writes the approved baseline. `--baseline <path>` can compare against an explicit JSON baseline for offline checks. Review each new or changed fact and its official source before explicitly updating deepseek-docs-baseline.json. The comparison ignores checkedAt, so a new scan timestamp is not reported as an upstream change. Unrecognized request-charge categories are reported as upstream changes for review and are not added to the plugin ledger. The checker does not update PRICE_HISTORY, billing logic, or the projection.
 
 On 2026-09-29, the upstream site separated API Guides, News, and other resources into distinct API documentation and News sidebars. The old guide, pricing, and 18 historical-news links remained accessible, and the News paths and titles were unchanged. The sidebar baseline was therefore rebuilt for the new navigation only; prices and historical announcements were not changed.
+
+The 2026-10-17 baseline refresh adds the V4.1-Flash-1017 News entry and two dated /updates/ entries. Official pricing pages show that the Flash API ID and token rates are unchanged, while Search and Fetch have separate successful-request fees and a server-side tool-call billing start at 2026-11-01 00:00 Beijing time. The baseline stores the serving model version, the published Flash/Pro token rates, each Search/Fetch request rate, the exact start time, and their English/Chinese source URLs. Search/Fetch fees are not folded into the Session token ledger.
 
 ## Maintenance workflow
 
