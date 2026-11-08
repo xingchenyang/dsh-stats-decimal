@@ -4,6 +4,37 @@ This file records user-visible changes. For development context and technical de
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-11-09
+
+Current maintained usage and documentation target DSH Desktop.
+
+### Added
+
+- Provider-billed Session accounting from own usage events: assistant messages, attempts, stream replacement, retry semantics, and per-request model/provider attribution.
+- Authoritative Multi-Agent aggregation through DSH `subagents.listDescendants`, with Coordinator Direct, descendant-only Subagents Aggregate, Tree cumulative/today totals, and truthful partial/unknown/unavailable states.
+- A responsive Usage & Billing footer with Session, Subagents, Local Today, and Balance scopes; a centered pricing-period pill; 2×2 desktop layout; and a 1-column narrow fallback.
+- A detailed accounting popup with per-scope cache-hit and sequential input/cache-read/cache-write/output/reasoning token rows, grouped integer formatting, accessible open/close behavior, and approximately 600px native-density desktop width.
+- An independent Local Today scope with progressive loading, authoritative same-day accounting, `observeSession` fast path with `readSession` fallback, and per-date/time-zone caching.
+
+### Changed
+
+- Await asynchronous DSH Session Projection registration and expose the accepted billingLedger read model without blocking plugin startup.
+- Replace the previous Session/Tree overlapping cost display with non-overlapping Session and descendant-only Subagents scopes; Tree total is now explanatory only.
+- Keep Balance as an independent scope with truthful loading, available, and unavailable display states.
+- Bump the billing projection state version to `8` so existing Sessions are refolded under the accepted accounting and read-model shape.
+- Retain `engines.dsh >=0.2.1-rc.1`; 0.9.0 was runtime-qualified on DSH `v0.2.2-rc.1` (Host protocol 4, Node `v24.20.0` in the qualification environment).
+
+### Fixed
+
+- Exclude fork-inherited prefixes from descendant billing by honoring `inheritedEventCount`.
+- Preserve attempt and retry usage without double-counting the final message or its stream sample.
+- Remove the DSH v0.2.2 per-Session persistence-listing preflight from Local Today while retaining the authoritative fallback.
+- Report reasoning as `—` when the provider omits the field, while showing an explicitly reported zero as `0`; reasoning remains informational and part of output, never billed again.
+- Prevent Balance from showing Normal while all authoritative amounts are unavailable, and never fabricate zero.
+- Keep the compact layout Session-independent with a plugin-owned responsive container: 2×2 on ordinary desktop widths and 1×4 only when genuinely narrow.
+
+Provider reconciliation qualification: **PASS** — exact frozen Provider D was CNY `0.01465588`; the entire local residual (245 uncached-input tokens, 6 output tokens, CNY `0.00026900`) was identified as the auxiliary provider-backed session-title request outside accepted Session usage events.
+
 ## [0.8.6] - 2026-10-17
 
 ### Changed

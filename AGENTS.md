@@ -12,7 +12,7 @@ Read `README.md`, `DEVELOPMENT.md`, and `CHANGELOG.md` in full before modifying 
 ## Repository Git identity and local work area
 
 - Use this repository's project-specific Safe Public Git identity: `dsh-stats-decimal <dsh-stats-decimal@example.invalid>`. Do not change global Git identity.
-- `.work/` is a temporary local work area. Only `.work/README.md` is tracked; keep its other contents ignored.
+- `.work/` is entirely transient local workspace and is ignored in full. Do not track files there.
 - `.githooks/` contains maintained and tracked repository safety tools. Enable the identity-check hook locally with `git config --local core.hooksPath .githooks`.
 
 ## Invariants

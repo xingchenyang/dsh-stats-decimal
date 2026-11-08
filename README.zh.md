@@ -1,21 +1,22 @@
 # dsh-stats-decimal
 
-[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.2.1--rc.2-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.2)
+[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.2.2--rc.1-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/license-MIT-2EA44F)](LICENSE)
 
 [English](README.md) | 中文
 
-> 本文件是与插件版本 `0.8.6` 对应的中文理解快照。发生冲突时，以英文版 `README.md` 为准；快照版本和同步状态见[本地化清单](docs/localization-manifest.json)。
+> 本文件是与插件版本 `0.9.0` 对应的中文理解快照。发生冲突时，以英文版 `README.md` 为准；快照版本和同步状态见[本地化清单](docs/localization-manifest.json)。
 
-这是一个运行于 DeepSeek Harness Web 会话及 Desktop 应用内嵌 Web 界面的 Cordis 插件。它保留 DSH 原生可展开会话统计，并增加 CNY/USD 费用估算、余额和当前计价时段。费用由 Host 根据会话事件计算。余额通过 Host 侧 RPC 查询，API Key 不会进入浏览器或 Session 日志。
+这是一个运行于 DeepSeek Harness Desktop 应用的 Cordis 插件。它保留 DSH 原生可展开会话统计，并增加 provider 计费的 Session 与子智能体费用、余额和当前计价时段。费用由 Host 根据 Session 事件计算。余额通过 Host 侧 RPC 查询，API Key 不会进入 renderer 或 Session 日志。
 
 ## 特性
 
 - 保留 DSH 原生 `StatsPills` 的轮次、速度、精确 token 数和缓存命中详情。
-- 独立显示费用和余额账本，不覆盖 DSH 原生 `stats` 项。
-- 显示 CNY/USD 会话累计费用、当前客户端本地日期的会话费用和所选 provider 的余额。
-- 在第二行显示当前客户端时区日期的全会话费用估算，包含子代理会话；峰谷计价仍按北京时间。
+- 独立显示 Usage & Billing 页脚，不覆盖 DSH 原生 `stats` 项。
+- 从 Session 自身的 provider usage 事件计算费用，包含 attempt、stream 与 retry replacement 语义，并排除 fork 继承的历史。
+- 通过 DSH 权威子代理成员关系显示仅包含后代的子智能体费用，不根据 parent/header 推断。
+- 显示累计费用、当前客户端本地日期费用、独立的本地今日 profile 汇总，以及所选 provider 的 CNY/USD 余额。
 - 根据每条事件发生时的历史模型价格、缓存桶、输出 token 及北京时间计价时段重放费用。
 - 显示当前北京时间日期类型和计价时段：工作日高峰/空闲、周末空闲或带名称的法定节假日。界面会显示本地化节日名称。
 - 周六、周日（包括调休上班日）和已编入日历的中国法定节假日始终使用谷价。可为内置模型或其他模型配置完整价格。
@@ -33,57 +34,58 @@
 
 ## 兼容性与代码结构
 
-- 最低 Host 要求：DeepSeek Harness `v0.2.1-rc.1` 或更高版本（插件 `0.8.6`）。最新观察到可运行的版本为 `v0.2.1-rc.2`。
-- 版本范围允许加载并不表示更高版本已通过运行时资格验证。RC.1 的资格结论仍仅适用于原测试范围；只有引入必需的 Host 能力或证实存在不兼容时，才提高最低版本。
+- 最低 Host 要求：DeepSeek Harness `v0.2.1-rc.1` 或更高版本（插件 `0.9.0`）。0.9.0 实际完成运行时资格验证的是 DSH `v0.2.2-rc.1`、Host protocol 4，资格环境中的 Node 为 `v24.20.0`。
+- 版本范围允许加载并不表示更高版本已通过运行时资格验证。历史 RC.1 的资格结论仍仅适用于原测试范围；只有引入必需的 Host 能力或证实存在不兼容时，才提高最低版本。
 - 插件使用 projection、slot 和 RPC contract；这不代表兼容资格记录以外的 DSH 版本。
-- Desktop 使用同一 Web 界面，但拥有独立的 `desktop` profile。安装后需在该 profile 启用费用配置。
-- Web 和 Desktop 的全会话当日估算均支持 DeepSeek API Key（`deepseek-official`）及账户登录（`deepseek-account`）推理方式。Web 使用浏览器 IANA 时区；Desktop 使用内嵌 Web renderer 提供的本地 IANA 时区。估算读取当前 profile 的会话日志，不依赖认证方式。
+- Desktop 使用独立的 `desktop` profile。安装后需在该 profile 启用费用配置。
+- 本地今日通过 DSH SessionQuery 读取当前 profile 的 Session 日志，不依赖 API Key 或账户登录认证。优先使用公开 `observeSession` 读取路径；不可用时回退到 `readSession`。Desktop renderer 提供本地 IANA 时区。
 - 插件使用 ESM JavaScript，依赖 `@deepseek-ai/schemastery` 和 `zod`。
 
 ~~~text
-lib/index.js             Host 插件、费用 projection、跨会话汇总和 RPC 路由
-lib/client.js            Web 账本、全会话当日估算、本地化和余额轮询
+lib/index.js             Host 插件、费用 projection、provider/树聚合和 RPC 路由
+lib/client.js            响应式 Usage & Billing UI、账务详情、本地化和余额轮询
+lib/usage.js             Session 与子智能体账务共用的 provider usage fold
 lib/pricing.js           价格表、价格覆盖、费用计算、北京时间计价时段
 cordis.patch.yml         Cordis bundle 注册入口
-scripts/reload-plugin.mjs 重新安装本地 file: 插件快照
 ~~~
 
 ## 显示内容
 
-DSH 原生统计保持不变。插件在 composer 下方、原生统计 pills 和上下文计量器之后添加独立费用区。第一行显示当前 Session 账本，第二行显示按当前客户端时区划分日期的全会话费用估算。该区域没有背景装饰。金额显示两位小数并直接截断，不四舍五入；峰谷计价仍按北京时间。
-
-示例：
+DSH 原生统计保持不变。插件在 composer 下方、原生统计 pills 和上下文计量器之后添加紧凑的 Usage & Billing 页脚，包含居中的计价时段 pill 和四个账务 scope：
 
 ~~~text
-工作日 · 高峰时段  CNY 累计 ¥0.57 · 今日 ¥0.57 · 余额 ¥89.54 | USD 累计 $0.08 · 今日 $0.08 · 余额 $0.00
-Weekday · PEAK  CNY Total ¥0.57 · Today ¥0.57 · Balance ¥89.54 | USD Total $0.08 · Today $0.08 · Balance $0.00
-Europe/Paris 2026-10-09 · 本地全会话今日 CNY ¥9.22 · USD $1.38 · 25 个会话
+● 工作日 · 空闲时段
+
+会话        ¥10.28 / ¥10.28       子智能体    ¥17.92 / ¥17.92
+本地今日    ¥40.12                余额        ¥50.17
 ~~~
 
-每个启用币种只显示一次。多币种用 `|` 分隔；单币种不显示分隔符。计价未知不会隐藏或改变余额。
+正常桌面宽度为两列两行；真正狭窄的宽度回退为一列四行。容器由插件自己建立并按宽度响应，不依赖 Session 类型。
 
-## 安装与插件管理
+- **会话**：当前 Session 自身累计/今日费用。
+- **子智能体**：来自 DSH 权威子代理成员关系的仅后代费用（`tree.subagentsAggregate`），不是 Tree 合计，也不是相减结果。
+- **本地今日**：当前 profile 在当前客户端时区当天的汇总。
+- **余额**：所选 provider 的独立余额。
 
-根据目标 profile 选择管理方式。Desktop profile 由 Desktop 应用的 Plugins 页面管理；Web profile 由命令行管理。两个 profile 互相独立。
+详情弹窗为每个 scope 增加缓存命中和逐行 token：输入、缓存读取、缓存写入、输出、推理。Ready scope 不重复显示正常状态；partial、unknown、unavailable 仍可见。没有子智能体时，compact 显示 `未使用`，详情只显示简洁说明。多智能体树合计只作为轻量解释行，不是主要组成项。
 
-| 环境 | 管理方式 |
-| --- | --- |
-| Desktop | Plugins 页面；使用 Add Plugin |
-| Web | CMD 或 PowerShell：`dsh plugin --profile web ...` |
+金额显示两位小数并直接截断，不四舍五入；token 数以分组整数显示，不使用 K/M/G 缩写。峰谷计价仍按北京时间。每个启用币种只显示一次；计价未知不会隐藏或改变余额。页脚不使用金额省略号或水平滚动。
 
-### Desktop
+## 安装
 
-在 Desktop 应用中打开 Plugins 页面，选择 Add Plugin，然后输入仓库地址：
+通过 DeepSeek Harness Desktop 的插件管理安装：
+
+1. 在 DSH Desktop 中打开 Plugins 页面。
+2. 选择 Add Plugin。
+3. 输入仓库地址：
 
 ~~~text
 https://github.com/xingchenyang/dsh-stats-decimal
 ~~~
 
-安装后选择 Enable Now 并重启 DSH Desktop。Desktop profile 的 pnpm 会安装插件声明的依赖。未指定 Git ref 时，pnpm 选择默认分支的最新 commit，并将该 commit 写入 profile lockfile。GitHub Release 不决定安装哪个 commit。
+4. 选择 Enable Now 并重启 DSH Desktop。
 
-如需更新 GitHub 安装，在 Add Plugin 中再次输入相同仓库地址，然后重启 Desktop。无需先卸载插件或重新安装 DSH Desktop。
-
-**DSH `v0.2.0-rc.1` 的已知界面警告：** 已安装插件再次提交同一 URL 后，pnpm 可能正常结束并显示 `Already up to date`、`added 0` 和 `Done`，但插件页面随后提示无法从依赖变更中确定安装了哪个包。观察到此提示时，插件版本已更新，重启后账户登录余额正常显示。遇到该情况时，pnpm 结果和已安装版本比界面警告更能反映安装结果。pnpm 报错、重启后版本未变或功能不可用时，应按安装失败处理。
+Desktop profile 的 pnpm 会安装插件声明的依赖。未指定 Git ref 时，pnpm 选择默认分支的最新 commit，并将该 commit 写入 profile lockfile。GitHub Release 不决定安装哪个 commit。
 
 若要从本地源码安装，可在 Add Plugin 中选择仓库目录。此方式登记为 `link:` 包，不会替链接目标目录安装依赖。先在仓库根目录准备运行时依赖：
 
@@ -91,62 +93,21 @@ https://github.com/xingchenyang/dsh-stats-decimal
 npm.cmd install --omit=dev --no-package-lock --ignore-scripts
 ~~~
 
-此命令只准备源码依赖，不会把插件安装到 DSH。Desktop 本地安装和配置都属于 Desktop profile。不要用 Web CLI 命令或 Web 重装脚本管理 Desktop profile。
+此命令只准备源码依赖，不会把插件安装到 DSH。安装和配置都属于 Desktop profile。
 
-### Web
-
-`dsh` 命令只管理 Web profile；Desktop profile 由 Desktop 应用管理。`dsh plugin` 内部使用 pnpm，因此 pnpm 必须已加入 PATH。若尚未安装 pnpm，可在 CMD 中运行：
-
-~~~cmd
-npm install -g pnpm
-~~~
-
-也可在 PowerShell 中运行：
-
-~~~powershell
-npm.cmd install -g pnpm
-~~~
-
-在包含已克隆仓库的目录中，添加插件并启动 Web：
-
-~~~cmd
-dsh plugin --profile web add file:./dsh-stats-decimal
-dsh web
-~~~
-
-PowerShell 命令相同。`file:./dsh-stats-decimal` 相对于当前 shell 目录解析，而不是相对于 profile 目录。`add` 会将插件写入 profile，并自动加入 `dsh.profile.bundles`，无需手动 insert。公共 `dsh` CLI 不管理官方 Desktop profile。参见 [DSH Desktop 指南](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.2/apps/desktop/README.zh.md)。
+**已知插件管理器警告：** 已安装插件再次提交同一 URL 后，pnpm 可能正常结束并显示 `Already up to date`、`added 0` 和 `Done`，但插件页面随后提示无法从依赖变更中确定安装了哪个包。观察到此提示时，插件版本已更新，重启后账户登录余额正常显示。pnpm 报错、重启后版本未变或功能不可用时，应按安装失败处理。
 
 ## 更新与卸载
 
-使用 Web CLI 的 `file:` 方式安装后，如果修改了源码，应重新安装并重启 DSH，使 Web profile 和 Host 重新加载插件。从包含仓库克隆的目录运行：
+更新 GitHub 安装时，在 Plugins 页面再次选择 Add Plugin 并输入相同仓库地址，然后重启 Desktop。无需先卸载插件或重新安装 DSH Desktop。
 
-~~~powershell
-dsh plugin --profile web remove dsh-stats-decimal
-dsh plugin --profile web add file:./dsh-stats-decimal
-dsh web
-~~~
+本地源码安装更新源码后，如 Desktop 插件管理器需要刷新，可重新提交本地目录；更新后重启 Desktop。
 
-仓库还提供一步重装脚本。从仓库根目录运行：
-
-~~~powershell
-node scripts/reload-plugin.mjs                 # profile 默认值为 web
-node scripts/reload-plugin.mjs --profile web   # 显式选择 web
-node scripts/reload-plugin.mjs --dry-run       # 只显示命令，不做修改
-~~~
-
-脚本只更新 profile 依赖和 `node_modules`，不会修改 `cordis.patch.yml`。之后仍需重启 `dsh web` 并硬刷新页面（Ctrl+F5）。直接通过 `node` 调用脚本可以避开 PowerShell 的 `.ps1` 执行策略。终端必须有权限写入 `$DSH_HOME\profiles\web`。
-
-从 Web profile 卸载：
-
-~~~powershell
-dsh plugin --profile web remove dsh-stats-decimal
-~~~
-
-如果 profile 的 `cordis.patch.yml` 中仍有 `stats-decimal` 条目，也应删除。残留条目不会妨碍以后重新安装。Desktop 插件只能通过 Desktop 应用的 Plugins 页面管理。
+卸载时通过 DSH Desktop 的插件管理移除插件，如提示则重启 Desktop。当前版本的受支持安装和管理入口是 DSH Desktop 应用。
 
 ## 配置
 
-Desktop 使用 `$DSH_HOME\profiles\desktop\cordis.patch.yml`。文件不存在时新建，顶层必须为 YAML 序列。使用 Web CLI 管理时，编辑 `$DSH_HOME\profiles\web\cordis.patch.yml`。两个 profile 使用相同设置：
+Desktop 使用 `$DSH_HOME\profiles\desktop\cordis.patch.yml`。文件不存在时新建，顶层必须为 YAML 序列：
 
 ~~~yaml
 - id: stats-decimal
@@ -160,7 +121,7 @@ Desktop 使用 `$DSH_HOME\profiles\desktop\cordis.patch.yml`。文件不存在�
       enabled: true
 ~~~
 
-修改 Desktop profile 后重启 Desktop；修改 Web profile 后重启 `dsh web` 并硬刷新（Ctrl+F5）。仅安装插件不会显示费用行，因为 `enableCost`、`cnyEnabled` 和 `usdEnabled` 默认均为 `false`。两个 profile 的配置互不共享。
+修改 Desktop profile 后重启 Desktop。仅安装插件不会显示页脚，因为 `enableCost`、`cnyEnabled` 和 `usdEnabled` 默认均为 `false`。
 
 | 设置 | 默认值 | 用途 |
 | --- | ---: | --- |
@@ -170,9 +131,9 @@ Desktop 使用 `$DSH_HOME\profiles\desktop\cordis.patch.yml`。文件不存在�
 | `balance.enabled` | `false` | 在启用币种片段中追加余额 |
 | `peakHours` | `[9,10,11,14,15,16,17]` | 北京时间工作日高峰钟点 |
 
-只有 `enableCost=true` 且至少启用一种币时才显示费用行。每种币显示累计金额和打开的 Session 在当前客户端时区当天的费用；启用余额后还会显示所选 provider 返回的余额。
+只有 `enableCost=true` 且至少启用一种币时才显示页脚。compact 页脚显示第一个配置的 CNY/USD 币种；详情弹窗显示全部启用币种。余额是独立的 compact scope，不使用累计/今日语义。
 
-全会话当日估算会在页面加载、当前会话的当日费用变化或会话结束后、本地午夜，以及每五分钟兜底时通过 DSH 的 `sessionQuery` 服务读取当前 profile 中的实时和已持久化 Session 日志。Web 浏览器或 Desktop 内嵌 Web renderer 会把 IANA 时区传给 Host，因此日期边界跟随当前客户端/设备时区并适用夏令时变化；客户端无法提供时区时使用 UTC。该日志估算不依赖会话使用 DeepSeek API Key 还是账户登录认证。峰谷计价仍按北京时间。短时间连续发生的用量和会话事件会合并刷新。它汇总每个 Session 自己产生的事件，包含子代理 Session，并排除 fork 继承的事件前缀以免重复计算。若查询服务不可用或任一日志无法读取，界面会显示统计暂不可用；若当天任一事件的价格未知，则显示费用未知。该估算只覆盖当前 DSH profile 的日志，不是官方账户账单；Web 和 Desktop profile 的会话存储互相独立。
+本地今日通过 DSH 的 `sessionQuery` 服务读取实时和已持久化 Session 日志。Desktop renderer 会把 IANA 时区传给 Host，因此日期边界跟随设备时区并适用夏令时变化；renderer 无法提供时区时使用 UTC。该估算不依赖会话使用 DeepSeek API Key 还是账户登录认证。Host 优先使用公开的 `observeSession` 读取路径，避免 v0.2.2 中每次读取 Session 前的持久化列表预检；`observeSession` 不可用时回退到 `readSession`。短时间连续发生的用量和 Session 事件会合并刷新。本地今日包含当前 profile 中每个 Session 自己产生的事件（包括子代理），并排除 fork 继承的事件前缀以免重复计算。会话和子智能体 scope 独立于本地今日加载。若查询服务不可用或任一日志无法读取，本地今日显示不可用，而不是伪造零值；若当天任一事件价格未知，则显示费用未知。该值只覆盖当前 DSH Desktop profile 的日志，不是官方账户账单。峰谷计价仍按北京时间。
 
 ### `peakHours`
 
@@ -221,14 +182,14 @@ overridePricing:
 - `deepseek-account` 只调用 DSH 的 `deepseekAccount.getBalance()` 服务，并按币种合计该服务分别返回的充值钱包和赠送钱包。不要在插件中配置账户 token 或 API Key。
 - 插件不会根据现有凭据或登录状态推测 provider。所选 provider 的服务或凭据不可用时显示 `Balance –`，绝不尝试另一个 provider。未知或无法确认的模型 provider 也显示 `Balance –`。
 - 为兼容旧 profile YAML，旧字段 `balance.provider` 和 `balance.apiBase` 会被接受但忽略。可在方便时删除；`apiBase` 无法改变固定 HTTPS 请求地址。
-- Web 和 Desktop 均可使用这两种余额路径。插件不会查询第三方模型服务商的账单或用量接口；每日统计仍是根据本地 token 用量和已配置模型价格计算的估算。
-- API Key 只在 Host 侧解析和使用，只发送到固定官方地址，不发送到浏览器、projection 或 Session 日志。Host 会从同一个 DSH 设置快照读取 endpoint 和凭据引用；请求期间 provider 路由或设置代次发生变化时会丢弃余额结果。这能将请求绑定到配置的路由，但不能从密码学上证明 API Key 的所有权。
+- 这些余额路径在 DSH Desktop 中可用。插件不会查询第三方模型服务商的账单或用量接口；每日统计仍是根据本地 token 用量和已配置模型价格计算的估算。
+- API Key 只在 Host 侧解析和使用，只发送到固定官方地址，不发送到 Desktop renderer、projection 或 Session 日志。Host 会从同一个 DSH 设置快照读取 endpoint 和凭据引用；请求期间 provider 路由或设置代次发生变化时会丢弃余额结果。这能将请求绑定到配置的路由，但不能从密码学上证明 API Key 的所有权。
 - 启用时，页面加载会读取余额，之后每五分钟轮询。切换 Session 或 provider 会立即清除旧余额。刷新页面可手动重新读取。
-- 禁用余额时，浏览器不会轮询余额 RPC。请求失败或缺少某币种余额时显示 `Balance –`。
+- 禁用余额时，Desktop renderer 不会轮询余额 RPC。请求完成但没有任何可用 CNY/USD 金额时显示不可用，而不是零；详情状态徽标不会在所有金额均为 `—` 时显示“正常”。provider source 仍可显示。
 
 ## 注意事项与许可证
 
-- 两行“今日”金额均按当前 Web 浏览器或 Desktop renderer 的 IANA 日历日期统计。第一行覆盖打开的 Session；第二行覆盖当前 DSH profile 中 `sessionQuery` 可读取的所有会话。
+- “今日”金额（会话和本地今日）均按当前 Desktop renderer 的 IANA 日历日期统计。会话 scope 只覆盖打开的 Session；本地今日覆盖当前 DSH Desktop profile 中 `sessionQuery` 可读取的所有会话。两者读取实时和已持久化日志；不可读历史或查询服务缺失会使相应 scope 显示不可用。本地今日包含子代理 Session，并排除 fork 继承的事件。两者都是本地日志估算，不是官方账户账单；峰谷计价和时段标签仍按北京时间。
 - 费用仅根据模型 token 用量和价格表估算，不包含 Search/Fetch 请求费用。直接调用 Search 或 Fetch API 时，每 1,000 次成功请求各为 ¥5 / $0.75；DeepSeek Harness、Claude Code 和 Codex 的服务端 Search/Fetch 调用目前免费，官方公告称自北京时间 2026-11-01 00:00（UTC+8）起计费。本插件无法从 Session 日志统计可计费的 Search/Fetch 请求。详见[价格历史档案](docs/PRICING_HISTORY.md)。最终金额以 DeepSeek 官方账单为准。
 - 余额是独立的官方 API 数据。模型价格未知不会隐藏或改变 DeepSeek 返回的余额。
 - 这是一个独立个人项目，与 DeepSeek、DeepSeek Harness 或 OpenAI 没有隶属、合作或背书关系。部分实现和文档使用了 AI 辅助。项目依据 [MIT License](LICENSE) 发布。

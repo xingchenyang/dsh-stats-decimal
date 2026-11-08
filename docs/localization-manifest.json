@@ -2,12 +2,12 @@
   "canonicalLanguage": "English",
   "canonicalEntryPoint": "README.md",
   "snapshotVersionSource": "package.json#version",
-  "snapshotVersion": "0.8.6",
+  "snapshotVersion": "0.9.0",
   "translations": [
     {
       "path": "README.zh.md",
       "canonicalPath": "README.md",
-      "snapshotVersion": "0.8.6",
+      "snapshotVersion": "0.9.0",
       "type": "release-scoped comprehension snapshot"
     }
   ],

@@ -12,7 +12,7 @@ const approvedChineseNavigation = "English | [" + String.fromCodePoint(0x4e2d, 0
 const markdownFiles = [
 	"README.md", "DEVELOPMENT.md", "CHANGELOG.md", "AGENTS.md",
 	"docs/BILLING_CALENDAR.md", "docs/PRICING_HISTORY.md",
-	"docs/DEEPSEEK_NEWS_INDEX.md", ".work/README.md"
+	"docs/DEEPSEEK_NEWS_INDEX.md"
 ];
 const plainEnglishFiles = [
 	".gitignore", ".gitattributes", ".githooks/pre-commit",
@@ -121,10 +121,6 @@ for (const file of markdownFiles) {
 	try {
 		source = await readFile(join(ROOT, file), "utf8");
 	} catch (error) {
-		if (file === ".work/README.md" && error?.code === "ENOENT") {
-			report(file, 1, "Required tracked repository documentation file is missing.");
-			continue;
-		}
 		throw error;
 	}
 	for (const line of proseLines(source)) {

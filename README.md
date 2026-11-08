@@ -1,19 +1,20 @@
 # dsh-stats-decimal
 
-[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.2.1--rc.2-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.2)
+[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-v0.2.2--rc.1-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/license-MIT-2EA44F)](LICENSE)
 
 English | [中文](README.zh.md)
 
-This Cordis plugin runs in DeepSeek Harness Web sessions and the Desktop app's embedded Web interface. It preserves DSH's expandable native session statistics and adds estimated CNY/USD costs, balances, and the current pricing period. Costs are calculated on the Host from session events. Balance requests use Host-side RPC, so the API key never enters the browser or Session log.
+This Cordis plugin runs in the DeepSeek Harness Desktop app. It preserves DSH's expandable native session statistics and adds provider-billed Session and Subagent costs, balances, and the current pricing period. Costs are calculated on the Host from Session events. Balance requests use Host-side RPC, so the API key never enters the renderer or Session log.
 
 ## Features
 
 - Keeps native `StatsPills` details for turns, speed, exact token counts, and cache hits.
-- Adds a separate cost and balance ledger without replacing DSH's native `stats` item.
-- Shows cumulative cost for the open session, its cost for the current client-local day, and the selected provider's balance in CNY and USD.
-- Shows a second-line estimate for the current client time zone's day across sessions in the current DSH profile, including subagent sessions.
+- Adds a separate Usage & Billing footer without replacing DSH's native `stats` item.
+- Bills the open Session from its own provider usage events, including attempt, stream, and retry replacement semantics, and excludes fork-inherited history.
+- Shows descendant-only Subagents accounting from authoritative DSH subagent membership; no parent/header inference.
+- Shows cumulative and current client-local-day cost, an independent Local Today profile total, and the selected provider's balance in CNY and USD.
 - Replays each event using its historical model price, cache buckets, output tokens, and Beijing-time pricing period.
 - Shows the current Beijing date type and pricing period: weekday peak/off-peak, weekend off-peak, or a named statutory holiday. The interface displays localized holiday names.
 - Saturday, Sunday (including makeup workdays), and bundled Chinese statutory holidays always use off-peak prices. Complete custom prices can be supplied for built-in or additional models.
@@ -31,57 +32,58 @@ This Cordis plugin runs in DeepSeek Harness Web sessions and the Desktop app's e
 
 ## Compatibility and code map
 
-- Minimum required host: DeepSeek Harness `v0.2.1-rc.1` or later (plugin `0.8.6`). The latest observed working runtime is `v0.2.1-rc.2`.
-- Versions admitted by the minimum range may load, but later DSH versions are not automatically runtime-qualified. The RC.1 qualification remains limited to its original tested scope; raise the minimum only when a required Host capability or a demonstrated incompatibility warrants it.
+- Minimum required host: DeepSeek Harness `v0.2.1-rc.1` or later (plugin `0.9.0`). The runtime actually qualified for 0.9.0 is DSH `v0.2.2-rc.1`, Host protocol 4, with Node `v24.20.0` in the qualification environment.
+- Versions admitted by the minimum range may load, but later DSH versions are not automatically runtime-qualified. Historical RC.1 qualification remains limited to its original tested scope; raise the minimum only when a required Host capability or a demonstrated incompatibility warrants it.
 - The plugin uses projection, slot, and RPC contracts; this does not imply compatibility with versions outside the documented qualification record.
-- Desktop uses the same Web interface but has a separate `desktop` profile. Enable cost settings in that profile after installation.
-- The all-session daily estimate works in Web and Desktop with both DeepSeek API-key (`deepseek-official`) and account-login (`deepseek-account`) inference. Web uses the browser's IANA time zone; Desktop uses the embedded Web renderer's local IANA time zone. The estimate reads the active profile's session logs and does not depend on the authentication method.
+- Desktop uses the separate `desktop` profile. Enable cost settings in that profile after installation.
+- Local Today reads the active profile's Session logs through DSH SessionQuery, independent of API-key or account-login authentication. It uses the public `observeSession` read path when available and falls back to `readSession`; the Desktop renderer supplies the local IANA time zone.
 - The plugin is ESM JavaScript and depends on `@deepseek-ai/schemastery` and `zod`.
 
 ~~~text
-lib/index.js             Host plugin, billing projection, session aggregation, and RPC routes
-lib/client.js            Web ledger, all-session daily estimate, localization, and balance polling
+lib/index.js             Host plugin, billing projection, provider/tree aggregation, and RPC routes
+lib/client.js            Responsive Usage & Billing UI, accounting detail, localization, and balance polling
+lib/usage.js             Shared provider-usage fold for Session and Subagents accounting
 lib/pricing.js           Price tables, overrides, cost calculation, Beijing-time periods
 cordis.patch.yml         Cordis bundle registration
-scripts/reload-plugin.mjs Reinstalls the local file: plugin snapshot
 ~~~
 
 ## Display
 
-The native DSH statistics remain intact. The plugin adds a separate cost readout below the composer, after the native statistics pills and context meter. Its first line shows the open session's cumulative ledger and current client-local day's cost; its second line shows that same day's total across sessions in the current DSH profile. Both daily amounts use the browser's or Desktop renderer's IANA time zone. The readout has no background decoration. Amounts are truncated to two decimal places; they are never rounded.
-
-Example output:
+The native DSH statistics remain intact. The plugin adds a compact Usage & Billing footer below the composer after the native statistics pills and context meter. It has a centered pricing-period pill and four accounting scopes:
 
 ~~~text
-Weekday · PEAK  CNY Total ¥0.57 · Today ¥0.57 · Balance ¥89.54 | USD Total $0.08 · Today $0.08 · Balance $0.00
-工作日 · 高峰时段  CNY 累计 ¥0.57 · 今日 ¥0.57 · 余额 ¥89.54 | USD 累计 $0.08 · 今日 $0.08 · 余额 $0.00
-Local sessions · 2026-10-09 (Europe/Paris) · Today CNY ¥9.22 | USD $1.38 · 25 sessions
+● Weekday · OFF-PEAK
+
+Session        ¥10.28 / ¥10.28       Subagents       ¥17.92 / ¥17.92
+Local Today    ¥40.12                Balance         ¥50.17
 ~~~
 
-Each enabled currency appears once. Multiple currencies are separated by `|`; a single currency has no separator. Unknown pricing does not hide or change the balance.
+The normal desktop layout is two columns by two rows. Genuinely narrow widths fall back to one column by four rows. The container is plugin-owned and width-driven; it does not depend on Session type.
 
-## Installation and plugin management
+- **Session** is the open Session's own cumulative/today cost.
+- **Subagents** is descendant-only cost from authoritative DSH subagent membership (`tree.subagentsAggregate`), not a Tree total and not a subtraction.
+- **Local Today** is the current client-time-zone day across the active DSH profile.
+- **Balance** is the selected provider's independent balance.
 
-Choose the management method for the target profile. Use the Desktop app's Plugins page for the Desktop profile and the command line for the Web profile. The profiles are independent.
+The detail popup adds per-scope cache hit and sequential token rows for input, cache read, cache write, output, and reasoning. Ready scopes do not show a redundant status badge; partial, unknown, and unavailable states remain visible. When there are no Subagents, the compact scope shows `Not used` and the detail shows only a concise explanation. Multi-Agent tree total remains a lightweight explanatory line, not a primary component.
 
-| Environment | Management method |
-| --- | --- |
-| Desktop | Plugins page; use Add Plugin |
-| Web | CMD or PowerShell: `dsh plugin --profile web ...` |
+Amounts are truncated to two decimal places and are never rounded; token counts are displayed as grouped integers, not K/M/G abbreviations. Peak/off-peak pricing remains based on Beijing time. Each enabled currency appears once; unknown pricing does not hide or change the balance. The footer does not use monetary ellipsis or horizontal scrolling.
 
-### Desktop
+## Installation
 
-In the Desktop app, open the Plugins page, choose Add Plugin, and enter the repository URL:
+Install the plugin through DeepSeek Harness Desktop's plugin management:
+
+1. Open the Plugins page in DSH Desktop.
+2. Choose Add Plugin.
+3. Enter the repository URL:
 
 ~~~text
 https://github.com/xingchenyang/dsh-stats-decimal
 ~~~
 
-After installation, choose Enable Now and restart DSH Desktop. The Desktop profile's pnpm installs dependencies declared by the plugin. Unless a Git ref is specified, pnpm selects the latest commit on the default branch and records that commit in the profile lockfile. GitHub Releases do not select the installed commit.
+4. Choose Enable Now and restart DSH Desktop.
 
-To update a GitHub installation, enter the same repository URL in Add Plugin again, then restart Desktop. Uninstalling the plugin or reinstalling DSH Desktop is not required.
-
-**Known UI warning on DSH `v0.2.0-rc.1`:** after submitting the same URL for an installed plugin, pnpm may finish successfully with `Already up to date`, `added 0`, and `Done`, while the plugin page reports that it could not determine which package was installed from the dependency changes. In the observed case, the plugin version had updated and account-login balance worked after restart. In that situation, the pnpm result and installed version were more reliable indicators than the warning. Treat a pnpm error, unchanged version after restart, or unavailable feature as an installation failure.
+The Desktop profile's pnpm installs the dependencies declared by the plugin. Unless a Git ref is specified, pnpm selects the latest commit on the default branch and records that commit in the profile lockfile. GitHub Releases do not select the installed commit.
 
 For a local source installation, select the repository directory in Add Plugin. This registers a `link:` package and does not install dependencies into the linked source directory. From the repository root, prepare the runtime dependencies first:
 
@@ -89,62 +91,21 @@ For a local source installation, select the repository directory in Add Plugin. 
 npm.cmd install --omit=dev --no-package-lock --ignore-scripts
 ~~~
 
-This command prepares source dependencies; it does not install the plugin into DSH. Local installation and configuration belong to the Desktop profile. Do not use Web CLI commands or the Web reload script to manage the Desktop profile.
+This command prepares source dependencies; it does not install the plugin into DSH. Installation and configuration belong to the Desktop profile.
 
-### Web
-
-The `dsh` command manages only the Web profile. The Desktop profile is managed by the Desktop app. The `dsh plugin` command uses pnpm, which must be on PATH. If pnpm is not installed, install it from CMD:
-
-~~~cmd
-npm install -g pnpm
-~~~
-
-Or from PowerShell:
-
-~~~powershell
-npm.cmd install -g pnpm
-~~~
-
-From the directory that contains the cloned repository, add the plugin and start Web:
-
-~~~cmd
-dsh plugin --profile web add file:./dsh-stats-decimal
-dsh web
-~~~
-
-The PowerShell commands are the same. The `file:./dsh-stats-decimal` path is resolved from the current shell directory, not the profile directory. The `add` command adds the plugin to the profile and to `dsh.profile.bundles`; no manual insert is needed. The public `dsh` CLI does not manage the official Desktop profile. See the [DSH Desktop guide](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.2/apps/desktop/README.zh.md).
+**Known plugin-manager warning:** after submitting the same URL for an installed plugin, pnpm may finish successfully with `Already up to date`, `added 0`, and `Done`, while the plugin page reports that it could not determine which package was installed from the dependency changes. In the observed case, the plugin version had updated and account-login balance worked after restart. Treat a pnpm error, unchanged version after restart, or unavailable feature as an installation failure.
 
 ## Update and uninstall
 
-After changing a source installed with the Web CLI's `file:` method, reinstall it and restart DSH so the Web profile and Host reload the plugin. Run these commands from the directory containing the clone:
+To update a GitHub installation, open the Plugins page, enter the same repository URL in Add Plugin again, then restart Desktop. Uninstalling the plugin or reinstalling DSH Desktop is not required.
 
-~~~powershell
-dsh plugin --profile web remove dsh-stats-decimal
-dsh plugin --profile web add file:./dsh-stats-decimal
-dsh web
-~~~
+For a local source installation, update the linked source and re-submit the local directory if the Desktop plugin manager requires a refresh. Restart Desktop after the update.
 
-The repository also includes a one-step reload script. Run it from the repository root:
-
-~~~powershell
-node scripts/reload-plugin.mjs                 # profile defaults to web
-node scripts/reload-plugin.mjs --profile web   # choose web explicitly
-node scripts/reload-plugin.mjs --dry-run       # print commands without changing anything
-~~~
-
-The script updates the profile dependency and `node_modules` only; it does not modify `cordis.patch.yml`. Restart `dsh web` and hard-refresh the page (Ctrl+F5) afterward. Calling the script with `node` avoids PowerShell's `.ps1` execution policy. The terminal must be able to write to `$DSH_HOME\profiles\web`.
-
-To uninstall from the Web profile:
-
-~~~powershell
-dsh plugin --profile web remove dsh-stats-decimal
-~~~
-
-If the profile's `cordis.patch.yml` still contains a `stats-decimal` entry, remove it as well. A leftover entry does not prevent a later reinstall. Manage the Desktop plugin only through the Desktop app's Plugins page.
+To uninstall, remove the plugin through DSH Desktop's plugin management, then restart Desktop if prompted. The Desktop app is the supported installation and management surface for the current release.
 
 ## Configuration
 
-Desktop reads `$DSH_HOME\profiles\desktop\cordis.patch.yml`. Create the file if needed; its top level must be a YAML sequence. For Web CLI management, edit `$DSH_HOME\profiles\web\cordis.patch.yml`. Both profiles use the same settings:
+Desktop reads `$DSH_HOME\profiles\desktop\cordis.patch.yml`. Create the file if it does not exist; its top level must be a YAML sequence:
 
 ~~~yaml
 - id: stats-decimal
@@ -158,7 +119,7 @@ Desktop reads `$DSH_HOME\profiles\desktop\cordis.patch.yml`. Create the file if 
       enabled: true
 ~~~
 
-After editing the Desktop profile, restart Desktop. For Web, restart `dsh web` and hard-refresh (Ctrl+F5). Installation alone does not show the cost row because `enableCost`, `cnyEnabled`, and `usdEnabled` default to `false`. Profile settings are not shared.
+After editing the Desktop profile, restart Desktop. Installation alone does not show the footer because `enableCost`, `cnyEnabled`, and `usdEnabled` default to `false`.
 
 | Setting | Default | Purpose |
 | --- | ---: | --- |
@@ -168,9 +129,9 @@ After editing the Desktop profile, restart Desktop. For Web, restart `dsh web` a
 | `balance.enabled` | `false` | Add balance to each enabled currency segment |
 | `peakHours` | `[9,10,11,14,15,16,17]` | Beijing weekday peak hours |
 
-The cost row appears only when `enableCost=true` and at least one currency is enabled. Each currency shows cumulative cost and the open Session's current client-local daily cost; the balance setting adds the selected provider's balance.
+The footer appears only when `enableCost=true` and at least one currency is enabled. The compact footer shows the first configured CNY/USD currency; the detail popup shows all enabled currencies. Balance remains a separate compact scope and does not inherit cumulative/today semantics.
 
-The Host reads live and persisted Session logs through DSH's `sessionQuery` service to calculate both daily amounts. The Web browser or Desktop's embedded Web renderer passes its IANA time zone so both daily boundaries follow that client/device zone, including daylight-saving changes; UTC is used if the client cannot provide a zone. The estimate is independent of whether sessions used DeepSeek API-key or account-login authentication. Short bursts of usage and session events are coalesced. The open-session amount counts only that session's owned events; the all-session amount includes owned events from every session, including subagents, and excludes fork-inherited events to avoid counting them twice. If the service is unavailable or any log cannot be read, the open-session daily amount shows `–` and the second line reports that its total is unavailable. If a current-day event has unknown pricing, its daily amount reports `Cost unknown`. The estimate covers logs in the current DSH profile and is not an official account bill; Web and Desktop profiles have separate session stores. Peak/off-peak pricing and its status label continue to use Beijing time.
+Local Today reads live and persisted Session logs through DSH's `sessionQuery` service. The Desktop renderer supplies its IANA time zone, so the day boundary follows the device zone, including daylight-saving changes; UTC is used if the renderer cannot provide a zone. The estimate is independent of whether Sessions used DeepSeek API-key or account-login authentication. The Host prefers DSH's public `observeSession` read path, which avoids the v0.2.2 per-session persistence-listing preflight, and falls back to `readSession` when `observeSession` is unavailable. Short bursts of usage and Session events are coalesced. Local Today includes owned events from every Session in the profile, including subagents, and excludes fork-inherited events so they are not counted twice. Session and Subagents scopes load independently of Local Today. If the service is unavailable or any log cannot be read, Local Today reports unavailable rather than a fabricated zero. If a current-day event has unknown pricing, its daily amount reports `Cost unknown`. The value covers logs in the current DSH Desktop profile and is not an official account bill. Peak/off-peak pricing and its status label continue to use Beijing time.
 
 ### `peakHours`
 
@@ -219,14 +180,14 @@ For every enabled currency, provide `cacheHit`, `cacheMiss`, and `output` prices
 - `deepseek-account` calls only DSH's `deepseekAccount.getBalance()` service and adds its recharge and promotional wallets by currency. Do not configure an account token or API key in the plugin.
 - The selected provider is never inferred from credentials or sign-in state. If its service or credentials are unavailable, the balance shows `Balance –`; the plugin never tries the other provider. Unsupported or unresolved model providers also show `Balance –`.
 - Legacy `balance.provider` and `balance.apiBase` fields are accepted for older profile YAML but ignored. Remove them when convenient; `apiBase` cannot change the fixed HTTPS destination.
-- These balance routes are available from both Web and Desktop. A third-party model provider's invoice or usage endpoint is not queried; the daily estimate remains a local token-usage estimate using configured model prices.
-- The API key is resolved and used only on the Host; it is sent only to the fixed official endpoint and never to the browser, projection, or Session log. The Host reads the endpoint and credential reference from one DSH settings snapshot and rejects a balance result if the provider route or settings generation changes while it is in flight. This binds the request to the configured route; it does not cryptographically prove API-key ownership.
+- These balance routes are available in DSH Desktop. A third-party model provider's invoice or usage endpoint is not queried; the daily estimate remains a local token-usage estimate using configured model prices.
+- The API key is resolved and used only on the Host; it is sent only to the fixed official endpoint and never to the Desktop renderer, projection, or Session log. The Host reads the endpoint and credential reference from one DSH settings snapshot and rejects a balance result if the provider route or settings generation changes while it is in flight. This binds the request to the configured route; it does not cryptographically prove API-key ownership.
 - Balance is read on page load and polled every five minutes while enabled. Switching Sessions or providers clears the previous balance immediately. Refresh the page to request it manually.
-- When balance is disabled, the browser does not poll the balance RPC. If a request fails or a currency balance is missing, the display shows `Balance –`.
+- When balance is disabled, the Desktop renderer does not poll the balance RPC. A completed request with no usable CNY/USD amount is shown as unavailable, not as zero; the detail badge cannot say Normal while all amounts are `—`. The provider source may remain visible.
 
 ## Notes and license
 
-- Both “Today” amounts use the Web browser's or Desktop renderer's current IANA calendar date. The first line covers the open Session; the second covers all sessions available through the current DSH profile's `sessionQuery` service.
+- “Today” amounts use the Desktop renderer's current IANA calendar date. Session covers only the open Session; Local Today covers all Sessions available through the current DSH Desktop profile's `sessionQuery` service.
 - Costs are estimates based on model token usage and the price table. They do not include Search or Fetch request fees. Direct Search and Fetch API requests are each priced at ¥5 / $0.75 per 1,000 successful requests; DeepSeek's server-side Search/Fetch calls through DSH, Claude Code, and Codex are announced to become billable at 2026-11-01 00:00 Beijing time (UTC+8). This plugin cannot count billable Search/Fetch requests from Session logs. See [price history](docs/PRICING_HISTORY.md). The final amount is determined by DeepSeek's official bill.
 - Balance is independent official API data. Unknown model pricing does not hide or change the balance returned by DeepSeek.
 - This independent personal project is not affiliated with or endorsed by DeepSeek, DeepSeek Harness, or OpenAI. Some implementation and documentation used AI assistance. The project is distributed under the [MIT License](LICENSE).

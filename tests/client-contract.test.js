@@ -9,7 +9,7 @@ function loadBalanceTestApi(reactOverride) {
 	let clientExports;
 	const instrumented = source.replace(
 		"\n\t\tfunction apply(ctx)",
-		"\n\t\texports.__balanceTestApi = { subscribeBalance, refreshBalance, balanceEntries, refreshTasks, selectedProviderFromProjection, invalidateBalanceEntries, invalidateRemovedSessionBalance, BillingStatus, apply, bindBalanceRpc(fn) { callGetBalance = fn; } };\n\t\tfunction apply(ctx)"
+		"\n\t\texports.__balanceTestApi = { subscribeBalance, refreshBalance, balanceEntries, refreshTasks, selectedProviderFromProjection, invalidateBalanceEntries, invalidateRemovedSessionBalance, BillingStatus, apply, parseUsageScopes, zoneAmountText, compactSingleText, compactPairText, compactAriaLabel, compactSubagentsText, compactSubagentsAriaLabel, cacheHitFromTokens, firstAvailableBalanceCurrency, balanceDisplayStatus, layoutModeForWidth, computeDetailPosition, formatCacheHit, formatTokenCount, zoneTokenRows, ZONE_CSS, ZONE_DOCK_ORDER, usageScopesSnapshot, subscribeUsageScopes, refreshUsageScopesPart, usageScopesEntries, bindBalanceRpc(fn) { callGetBalance = fn; }, bindUsageScopesRpc(fn) { callGetUsageScopes = fn; } };\n\t\tfunction apply(ctx)"
 	);
 	assert.notEqual(instrumented, source, "balance test hook insertion point should exist");
 	let now = Date.UTC(2026, 9, 10, 12);
@@ -109,7 +109,7 @@ test("client preserves DSH native stats and registers a separate billing cell", 
 });
 
 test("balance RPC polling is gated by the Host balanceEnabled projection flag", () => {
-	assert.match(source, /const balanceEnabled = ledgerVal !== void 0 && ledgerVal\.balanceEnabled === true/);
+	assert.match(source, /const balanceEnabled = ledgerVal !== null && ledgerVal !== void 0 && ledgerVal\.balanceEnabled === true/);
 	assert.match(source, /if \(!enabled \|\| !balanceEnabled\)/);
 	assert.match(source, /useProjection\("modelSelection"\)/);
 	assert.match(source, /getBalance", \{ sessionId \}, controller\.signal/);
@@ -497,8 +497,8 @@ test("browser current-period logic honors Host-supplied holiday spans", () => {
 test("currency formatting truncates at display boundaries and handles defensive inputs", () => {
 	let clientExports;
 	const instrumented = source.replace(
-		"\n\t\tfunction currencyLedgerSegment(",
-		"\n\t\texports.__formatAmountForTest = formatAmount;\n\t\tfunction currencyLedgerSegment("
+		"\n\t\tfunction formatAmount(",
+		"\n\t\texports.__formatAmountForTest = formatAmount;\n\t\tfunction formatAmount("
 	);
 	assert.notEqual(instrumented, source, "test hook insertion point should exist");
 	vm.runInNewContext(instrumented, {
@@ -521,4 +521,696 @@ test("currency formatting truncates at display boundaries and handles defensive 
 	assert.equal(format(Number.NaN, "USD", 2), "$0.00");
 	assert.equal(format(Number.POSITIVE_INFINITY, "USD", 2), "$0.00");
 	assert.equal(format(-0.01, "USD", 2), "$0.00");
+});
+
+test("usage scopes parser preserves Host statuses and never converts unknown or unavailable into zero", () => {
+	const { api } = loadBalanceTestApi();
+	const payload = {
+		date: "2026-11-08",
+		timeZone: "Europe/Paris",
+		generatedAt: 123456,
+		session: {
+			status: "ready",
+			cumulative: { CNY: 1.25, USD: 0.2 },
+			today: { CNY: 0.5, USD: 0.1 },
+			tokens: { uncachedInput: 10, cacheRead: 20, cacheWrite: 0, output: 5, reasoning: 2 },
+			cacheHit: 0.5,
+			pricingKnown: true,
+			usageKnown: true
+		},
+		tree: {
+			status: "partial",
+			cumulative: { CNY: 3.4, USD: 0.47 },
+			today: { CNY: 1.2, USD: 0.17 },
+			tokens: { uncachedInput: 30, cacheRead: 40, cacheWrite: 0, output: 15, reasoning: 3 },
+			cacheHit: 0.6,
+			pricingKnown: false,
+			usageKnown: true,
+			complete: false,
+			hasDescendants: true,
+			coordinatorDirect: {
+				cumulative: { CNY: 2.4, USD: 0.33 },
+				today: { CNY: 0.7, USD: 0.09 },
+				tokens: { uncachedInput: 20, cacheRead: 30, cacheWrite: 0, output: 10, reasoning: 2 }
+			},
+			subagentsAggregate: {
+				cumulative: { CNY: 1, USD: 0.14 },
+				today: { CNY: 0.5, USD: 0.08 },
+				tokens: { uncachedInput: 10, cacheRead: 10, cacheWrite: 0, output: 5, reasoning: 1 }
+			},
+			diagnostics: { external: true, unreadable: false }
+		},
+		local: {
+			status: "unknown",
+			today: { CNY: 9.22, USD: 1.38 },
+			tokens: null,
+			cacheHit: null,
+			pricingKnown: false,
+			usageKnown: true,
+			sessionCount: 30
+		}
+	};
+	const parsed = api.parseUsageScopes(payload);
+	assert.equal(parsed.date, "2026-11-08");
+	assert.equal(parsed.timeZone, "Europe/Paris");
+	assert.equal(parsed.generatedAt, 123456);
+	assert.equal(parsed.session.status, "ready");
+	assert.equal(parsed.session.cumulative.CNY, 1.25);
+	assert.equal(parsed.session.cumulative.USD, 0.2);
+	assert.equal(parsed.tree.status, "partial");
+	assert.equal(parsed.tree.complete, false);
+	assert.equal(parsed.tree.hasDescendants, true);
+	assert.equal(parsed.tree.coordinatorDirect.cumulative.CNY, 2.4);
+	assert.equal(parsed.tree.subagentsAggregate.today.USD, 0.08);
+	assert.equal(parsed.tree.diagnostics.external, true);
+	assert.equal(parsed.local.status, "unknown");
+	assert.equal(parsed.local.sessionCount, 30);
+	assert.equal(parsed.session.tokens.reasoning, 2);
+	assert.equal(parsed.tree.tokens.cacheRead, 40);
+
+	const unavailable = api.parseUsageScopes(null, "rpc-error");
+	assert.equal(unavailable.session.status, "unavailable");
+	assert.equal(unavailable.tree.status, "unavailable");
+	assert.equal(unavailable.local.status, "unavailable");
+	assert.equal(unavailable.session.cumulative, null);
+	assert.equal(unavailable.tree.cumulative, null);
+	assert.equal(unavailable.local.today, null);
+});
+
+test("usage scopes amount presentation is status-aware and never fabricates zero", () => {
+	const { api } = loadBalanceTestApi();
+	const t = (key) => key === "statsDecimal.valueSeparator" ? " · " : key;
+	assert.equal(api.zoneAmountText("ready", { CNY: 12.34, USD: 1.5 }, ["CNY", "USD"], t), "¥12.34 · $1.50");
+	assert.equal(api.zoneAmountText("partial", { CNY: 12.34, USD: 1.5 }, ["CNY"], t), "¥12.34");
+	assert.equal(api.zoneAmountText("unknown", { CNY: 12.34 }, ["CNY"], t), "statsDecimal.costUnknown");
+	assert.equal(api.zoneAmountText("unavailable", null, ["CNY"], t), "statsDecimal.status.unavailable");
+	assert.equal(api.zoneAmountText("loading", null, ["CNY"], t), "statsDecimal.status.loading");
+	assert.equal(api.zoneAmountText("ready", { CNY: null }, ["CNY"], t), "statsDecimal.dailyCostUnavailable");
+	assert.equal(api.formatCacheHit(0.12345), "12.34%");
+	assert.equal(api.formatCacheHit(null), null);
+});
+
+test("compact summaries use the first configured currency and never fabricate zero", () => {
+	const { api } = loadBalanceTestApi();
+	const t = (key) => key === "statsDecimal.compact.separator" ? " / " : key === "statsDecimal.valueSeparator" ? " · " : key;
+	assert.equal(api.compactSingleText("ready", { USD: 1.25, CNY: 9.2 }, "USD", t), "$1.25");
+	assert.equal(api.compactPairText("ready", { USD: 1.25 }, { USD: 0.5 }, "USD", t), "$1.25 / $0.50");
+	assert.equal(api.compactSingleText("partial", { USD: 1.25 }, "USD", t), "$1.25");
+	assert.equal(api.compactSingleText("unknown", { USD: 1.25 }, "USD", t), "statsDecimal.compact.unknown");
+	assert.equal(api.compactSingleText("unavailable", { USD: 1.25 }, "USD", t), "statsDecimal.compact.unavailable");
+	assert.equal(api.compactSingleText("loading", null, "USD", t), "statsDecimal.compact.loading");
+	assert.equal(api.compactSingleText("disabled", null, "USD", t), "statsDecimal.compact.disabled");
+	assert.equal(api.compactSingleText("ready", { USD: 1.25 }, null, t), "statsDecimal.compact.unavailable");
+	assert.equal(api.compactSubagentsText({ hasDescendants: false }, "ready", "USD", t), "statsDecimal.compact.notUsed");
+	assert.equal(api.compactSubagentsText({ hasDescendants: true, cumulative: { USD: 99 }, today: { USD: 99 }, subagentsAggregate: { cumulative: { USD: 1.25 }, today: { USD: 0.5 } } }, "ready", "USD", t), "$1.25 / $0.50");
+	assert.equal(api.compactSubagentsText({ hasDescendants: null, subagentsAggregate: { cumulative: { USD: 1.25 }, today: { USD: 0.5 } } }, "ready", "USD", t), "statsDecimal.compact.unknown");
+	assert.equal(api.compactSubagentsText({ hasDescendants: null, subagentsAggregate: { cumulative: { USD: 1.25 }, today: { USD: 0.5 } } }, "unknown", "USD", t), "statsDecimal.compact.unknown");
+	assert.equal(api.compactSubagentsAriaLabel({ hasDescendants: false }, "ready", "USD", t), "statsDecimal.compact.subagents: statsDecimal.compact.notUsed");
+	assert.equal(api.cacheHitFromTokens({ uncachedInput: 1, cacheRead: 9, cacheWrite: 0 }), 0.9);
+	assert.equal(api.cacheHitFromTokens({ uncachedInput: 0, cacheRead: 0, cacheWrite: 0 }), null);
+	assert.match(source, /"statsDecimal\.compact\.subagents": "子智能体"/);
+	assert.match(source, /"statsDecimal\.scope\.subagents": "子智能体"/);
+	assert.equal(
+		api.compactAriaLabel("local", "ready", null, { USD: 1.25 }, "USD", t),
+		"statsDecimal.compact.local: statsDecimal.compact.aria.local"
+	);
+	assert.equal(
+		api.zoneAmountText("ready", { CNY: 1.25, USD: 0.2 }, ["USD", "CNY"], t),
+		"$0.20 · ¥1.25"
+	);
+});
+
+test("Subagents compact and aggregate values are non-overlapping with Session", () => {
+	const { api } = loadBalanceTestApi();
+	const t = (key) => key === "statsDecimal.compact.separator" ? " / " : key;
+	const parsed = api.parseUsageScopes({
+		date: "2026-11-08",
+		timeZone: "Europe/Paris",
+		session: {
+			status: "ready",
+			cumulative: { CNY: 1.25, USD: 0.2 },
+			today: { CNY: 0.75, USD: 0.1 },
+			tokens: { uncachedInput: 20, cacheRead: 30, cacheWrite: 0, output: 10, reasoning: 2 },
+			cacheHit: 0.6,
+			pricingKnown: true,
+			usageKnown: true
+		},
+		tree: {
+			status: "ready",
+			cumulative: { CNY: 3.4, USD: 0.47 },
+			today: { CNY: 1.2, USD: 0.17 },
+			tokens: { uncachedInput: 30, cacheRead: 40, cacheWrite: 0, output: 15, reasoning: 3 },
+			cacheHit: 0.57,
+			pricingKnown: true,
+			usageKnown: true,
+			hasDescendants: true,
+			subagentsAggregate: {
+				cumulative: { CNY: 2.15, USD: 0.27 },
+				today: { CNY: 0.45, USD: 0.07 },
+				tokens: { uncachedInput: 10, cacheRead: 10, cacheWrite: 0, output: 5, reasoning: 1 }
+			}
+		},
+		local: { status: "ready", today: { CNY: 0, USD: 0 }, tokens: null, cacheHit: null, pricingKnown: true, usageKnown: true, sessionCount: 0 }
+	});
+	assert.equal(api.compactSubagentsText(parsed.tree, "ready", "USD", t), "$0.27 / $0.07");
+	assert.equal(api.compactSubagentsText(parsed.tree, "ready", "USD", t).includes("$0.47"), false);
+	assert.equal(api.cacheHitFromTokens(parsed.tree.subagentsAggregate.tokens), 0.5);
+	assert.equal(parsed.session.tokens.uncachedInput + parsed.tree.subagentsAggregate.tokens.uncachedInput, parsed.tree.tokens.uncachedInput);
+	assert.ok(Math.abs((parsed.session.cumulative.USD + parsed.tree.subagentsAggregate.cumulative.USD) - parsed.tree.cumulative.USD) < 1e-12);
+});
+
+test("Balance display status requires an actual numeric amount and agrees across surfaces", () => {
+	const { api } = loadBalanceTestApi();
+	const currencies = ["CNY", "USD"];
+	assert.equal(api.balanceDisplayStatus(true, true, null, currencies), "loading");
+	assert.equal(api.balanceDisplayStatus(false, false, null, currencies), "disabled");
+	assert.equal(api.balanceDisplayStatus(true, false, null, currencies), "unavailable");
+	assert.equal(api.balanceDisplayStatus(true, false, { balances: { CNY: null, USD: null }, provider: "deepseek-account" }, currencies), "unavailable");
+	assert.equal(api.balanceDisplayStatus(true, false, { balances: { CNY: null, USD: 0 }, provider: "deepseek-account" }, currencies), "ready");
+	assert.equal(api.balanceDisplayStatus(true, false, { balances: { CNY: 8.5, USD: null }, provider: "deepseek-account" }, currencies), "ready");
+	assert.equal(api.firstAvailableBalanceCurrency(currencies, { CNY: null, USD: 3.2 }), "USD");
+	assert.equal(api.firstAvailableBalanceCurrency(currencies, { CNY: null, USD: null }), null);
+	assert.equal(api.compactSingleText("unavailable", { CNY: null, USD: null }, "CNY", (key) => key), "statsDecimal.compact.unavailable");
+	assert.match(source, /const balanceStatus = balanceDisplayStatus\(balanceEnabled, balanceLoading, visibleBalance, currencies\)/);
+	assert.match(source, /detailCard\("balance", t\("statsDecimal\.scope\.balance"\), balanceStatus/);
+	assert.match(source, /visibleBalance\?\.provider \? t\("statsDecimal\.detail\.balanceSource"/);
+});
+
+test("usage scopes layout breakpoints are container thresholds, not viewport/sidebar state", () => {
+	const { api } = loadBalanceTestApi();
+	assert.equal(api.layoutModeForWidth(800), "medium");
+	assert.equal(api.layoutModeForWidth(1000), "medium");
+	assert.equal(api.layoutModeForWidth(799), "medium");
+	assert.equal(api.layoutModeForWidth(400), "medium");
+	assert.equal(api.layoutModeForWidth(399), "narrow");
+	assert.match(api.ZONE_CSS, /container-type:inline-size/);
+	assert.match(api.ZONE_CSS, /\.dsh-sd-responsive\{container-type:inline-size/);
+	assert.match(api.ZONE_CSS, /\.dsh-sd-inset\{[^}]*padding:0 calc\(var\(--dsh-composer-side-clearance\) \+ 16px\)/);
+	assert.doesNotMatch(api.ZONE_CSS, /\[data-stats-decimal-zone\]\{[^}]*container-type/);
+	assert.match(source, /className: "dsh-sd-responsive"/);
+	assert.match(source, /className: "dsh-sd-inset"/);
+	assert.match(api.ZONE_CSS, /@container \(min-width:400px\)/);
+	assert.match(api.ZONE_CSS, /grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+	assert.doesNotMatch(api.ZONE_CSS, /grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+	assert.doesNotMatch(api.ZONE_CSS, /ZONE_WIDE_MIN|min-width:800px/);
+	assert.doesNotMatch(source, /ZONE_WIDE_MIN|repeat\(4,minmax\(0,1fr\)\)/);
+	assert.match(api.ZONE_CSS, /font-variant-numeric:tabular-nums/);
+	assert.equal((source.match(/data-composer-dock/g) ?? []).length, 1);
+	assert.doesNotMatch(source, /textOverflow|text-overflow|ellipsis/);
+	assert.doesNotMatch(source, /closest\('\[data-slot|parentElement/);
+	assert.doesNotMatch(source, /sidebar|innerWidth ===|innerWidth </);
+	assert.doesNotMatch(source, /overflow-x\s*:/);
+});
+
+test("dock adapter orders the plugin after native items, not native content after the plugin", () => {
+	const { api } = loadBalanceTestApi();
+	assert.equal(api.ZONE_DOCK_ORDER, 1);
+	assert.match(api.ZONE_CSS, /\[data-stats-decimal-zone\]\{[^}]*order:1/);
+	assert.match(api.ZONE_CSS, /flex-wrap:wrap/);
+	assert.match(api.ZONE_CSS, /flex:1 1 100%/);
+	assert.doesNotMatch(source, /ContextMeter|A6Bq1a|21%|nth-child|nextElementSibling|previousElementSibling/);
+
+	// Observed DOM order in DSH: slot entries (activity, usage, plugin) followed
+	// by the Context Meter sibling. CSS order 0 is native; the plugin is after
+	// every native item, so native relative order is unchanged.
+	const dockItems = [
+		{ key: "native-activity", order: 0 },
+		{ key: "native-usage", order: 0 },
+		{ key: "plugin-zone", order: api.ZONE_DOCK_ORDER },
+		{ key: "native-context", order: 0 }
+	];
+	const visualOrder = [...dockItems]
+		.sort((left, right) => left.order - right.order)
+		.map((item) => item.key);
+	assert.deepEqual(visualOrder, [
+		"native-activity",
+		"native-usage",
+		"native-context",
+		"plugin-zone"
+	]);
+});
+
+test("detail opening does not start a unique accounting computation path", () => {
+	assert.match(source, /requestRefreshTask\(usageScopesRefreshKey\(sessionId, "fast"\)\)/);
+	assert.match(source, /requestRefreshTask\(usageScopesRefreshKey\(sessionId, "local"\)\)/);
+	assert.match(source, /subscribeUsageScopes\(sessionId, \(snapshot\) => setUsageSnapshot/);
+	const triggerBlock = source.slice(source.indexOf("const zone = h"), source.indexOf("const detailRows ="));
+	assert.doesNotMatch(triggerBlock, /requestRefreshTask|rpcFetchUsageScopes/);
+});
+
+test("detail positioning passes through a hidden first measurement and rAF settle", () => {
+	const { api } = loadBalanceTestApi();
+	const right = api.computeDetailPosition(
+		{ left: 950, top: 300, width: 40, height: 40, bottom: 340 },
+		{ width: 300, height: 180 },
+		{ width: 1000, height: 800 }
+	);
+	assert.equal(right.placement, "below");
+	assert.ok(right.left + right.width <= 988);
+	const small = api.computeDetailPosition(
+		{ left: 10, top: 180, width: 40, height: 40, bottom: 220 },
+		{ width: 460, height: 500 },
+		{ width: 320, height: 240 }
+	);
+	assert.ok(small.width <= 296);
+	assert.ok(small.left >= 12);
+	assert.ok(small.top >= 12);
+	assert.ok(small.maxHeight >= 120);
+	assert.match(source, /visibility: detailReady \? "visible" : "hidden"/);
+	assert.match(source, /requestAnimationFrame/);
+	assert.match(source, /const openDetail = \(\) =>/);
+	assert.match(source, /setDetailPosition\(null\)/);
+});
+
+test("usage scopes detail positioning stays inside the viewport and flips near the bottom", () => {
+	const { api } = loadBalanceTestApi();
+	const below = api.computeDetailPosition(
+		{ left: 400, top: 300, width: 100, height: 40, bottom: 340 },
+		{ width: 300, height: 180 },
+		{ width: 1000, height: 800 }
+	);
+	assert.equal(below.placement, "below");
+	assert.ok(below.left >= 12);
+	assert.ok(below.top >= 12);
+	assert.ok(below.left + below.width <= 988);
+
+	const above = api.computeDetailPosition(
+		{ left: 400, top: 700, width: 100, height: 40, bottom: 740 },
+		{ width: 300, height: 500 },
+		{ width: 1000, height: 800 }
+	);
+	assert.equal(above.placement, "above");
+	assert.ok(above.top >= 12);
+	assert.ok(above.maxHeight >= 120);
+});
+
+test("progressive usage scopes deliver Session/Tree before Local Today resolves", async () => {
+	const { api, advance } = loadBalanceTestApi();
+	let releaseLocal;
+	const localGate = new Promise((resolve) => { releaseLocal = resolve; });
+	api.bindUsageScopesRpc(async (_base, _method, payload) => {
+		if (payload.scopes.includes("local")) {
+			await localGate;
+			return {
+				ok: true,
+				value: {
+					date: "2026-11-08",
+					timeZone: "Europe/Paris",
+					session: null,
+					tree: null,
+					local: {
+						status: "ready",
+						today: { CNY: 5, USD: 1 },
+						tokens: null,
+						cacheHit: null,
+						pricingKnown: true,
+						usageKnown: true,
+						sessionCount: 4
+					},
+					generatedAt: 2
+				}
+			};
+		}
+		return {
+			ok: true,
+			value: {
+				date: "2026-11-08",
+				timeZone: "Europe/Paris",
+				session: {
+					status: "ready",
+					cumulative: { CNY: 1, USD: 0.2 },
+					today: { CNY: 0.5, USD: 0.1 },
+					tokens: null,
+					cacheHit: null,
+					pricingKnown: true,
+					usageKnown: true
+				},
+				tree: {
+					status: "ready",
+					cumulative: { CNY: 1, USD: 0.2 },
+					today: { CNY: 0.5, USD: 0.1 },
+					tokens: null,
+					cacheHit: null,
+					pricingKnown: true,
+					usageKnown: true,
+					complete: true,
+					hasDescendants: false,
+					diagnostics: {}
+				},
+				local: null,
+				generatedAt: 1
+			}
+		};
+	});
+	const updates = [];
+	const release = api.subscribeUsageScopes("progressive-session", (snapshot) => updates.push(snapshot));
+	await advance(0);
+	assert.ok(updates.some((snapshot) => snapshot.fastValue !== null && snapshot.localValue === null));
+	releaseLocal();
+	await advance(0);
+	assert.ok(updates.some((snapshot) => snapshot.fastValue !== null && snapshot.localValue?.local?.today?.CNY === 5));
+	release();
+});
+
+test("a Local Today failure does not erase fast Session/Tree data", async () => {
+	const { api, advance } = loadBalanceTestApi();
+	api.bindUsageScopesRpc(async (_base, _method, payload) => {
+		if (payload.scopes.includes("local")) return { ok: false, error: { code: "rpc-error" } };
+		return {
+			ok: true,
+			value: {
+				date: "2026-11-08",
+				timeZone: "Europe/Paris",
+				session: {
+					status: "ready",
+					cumulative: { CNY: 1, USD: 0.2 },
+					today: { CNY: 0.5, USD: 0.1 },
+					tokens: null,
+					cacheHit: null,
+					pricingKnown: true,
+					usageKnown: true
+				},
+				tree: {
+					status: "ready",
+					cumulative: { CNY: 1, USD: 0.2 },
+					today: { CNY: 0.5, USD: 0.1 },
+					tokens: null,
+					cacheHit: null,
+					pricingKnown: true,
+					usageKnown: true,
+					complete: true,
+					hasDescendants: false,
+					diagnostics: {}
+				},
+				local: null,
+				generatedAt: 1
+			}
+		};
+	});
+	const updates = [];
+	const release = api.subscribeUsageScopes("independent-session", (snapshot) => updates.push(snapshot));
+	await advance(0);
+	assert.ok(updates.some((snapshot) => snapshot.fastValue?.session?.status === "ready"));
+	assert.ok(updates.some((snapshot) => snapshot.fastValue !== null && snapshot.localError !== null));
+	release();
+});
+
+test("usage scopes compact Zone is on the accepted dock slot and removes the old private DOM layout", () => {
+	assert.match(source, /name: "conversation\.composer\.dock"/);
+	assert.match(source, /id: "stats-decimal-billing"/);
+	assert.match(source, /order: 10/);
+	assert.match(source, /data-stats-decimal-zone/);
+	assert.match(source, /"data-plugin": "dsh-stats-decimal"/);
+	assert.match(source, /dsh-sd-pills/);
+	assert.doesNotMatch(source, /dsh-sd-grid|dsh-sd-header|dsh-sd-card|dsh-sd-period|dsh-sd-date/);
+	assert.match(source, /dsh-sd-detail/);
+	assert.match(source, /role: "dialog"/);
+	assert.match(source, /Escape/);
+	assert.match(source, /pointerdown/);
+	assert.match(source, /aria-expanded/);
+	assert.match(source, /createPortal/);
+	assert.match(source, /aria-modal/);
+	assert.match(source, /triggerRef\.current\?\.focus\?\./);
+	assert.match(source, /panelRef\.current\?\.focus\?\./);
+	assert.match(source, /statsDecimal\.detail\.disclaimer/);
+	assert.doesNotMatch(source, /data-slot="conversation\.composer\.dock"/);
+	assert.doesNotMatch(source, /statsDecimal\.currency|currencyLedgerSegment\(/);
+});
+
+test("usage scopes uses only the aggregate Host read model and the existing balance source", () => {
+	assert.match(source, /stats-decimal\/getUsageScopes/);
+	assert.match(source, /callGetUsageScopes\(\s*"\/api",\s*"stats-decimal\/getUsageScopes"/s);
+	assert.match(source, /usageScopesSnapshot/);
+	assert.match(source, /generatedAt/);
+	assert.match(source, /stats-decimal\/getBalance/);
+	assert.doesNotMatch(source, /listDescendants|parentSession|childId/);
+	assert.match(source, /usageScopesEntries\.get\(sessionId\) !== entry/);
+	assert.match(source, /usageSnapshotMatchesSession/);
+	assert.match(source, /usageSnapshot\?\.sessionId === sessionId/);
+	assert.match(source, /statsDecimal\.detail\.transportError/);
+	assert.match(source, /statsDecimal\.detail\.period/);
+	assert.match(source, /const localCompact = compactSingleText\(localStatus, localScope\?\.today/);
+});
+
+test("dense detail uses a two-column wide layout with compact token grids and no-descendant suppression", () => {
+	const { api } = loadBalanceTestApi();
+	assert.match(api.ZONE_CSS, /\.dsh-sd-detail\{[^}]*width:min\(600px/);
+	assert.doesNotMatch(api.ZONE_CSS, /width:min\(620px/);
+	assert.doesNotMatch(api.ZONE_CSS, /width:min\(820px/);
+	assert.doesNotMatch(api.ZONE_CSS, /width:min\(820px/);
+	assert.match(api.ZONE_CSS, /@container \(min-width:520px\)\{\.dsh-sd-detail-grid\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}\}/);
+	assert.match(api.ZONE_CSS, /\.dsh-sd-token-list\{[^}]*display:grid/);
+	assert.doesNotMatch(api.ZONE_CSS, /\.dsh-sd-token-grid/);
+	assert.match(source, /treeScope\?\.subagentsAggregate/);
+	assert.match(source, /className: "dsh-sd-detail-grid"/);
+	assert.match(source, /className: "dsh-sd-token-list"/);
+	assert.match(source, /const detailCard =/);
+	assert.match(source, /treeHasDescendants === false/);
+	assert.match(source, /statsDecimal\.detail\.noDescendants/);
+	assert.match(source, /sessionStatus === "ready" \? \[\]/);
+	assert.match(source, /treeStatus === "ready" \? \[\]/);
+	assert.match(source, /function compactSubagentsAriaLabel/);
+	assert.match(source, /treeScope\?\.hasDescendants === false/);
+	assert.match(source, /statsDecimal\.compact\.notUsed/);
+	assert.match(source, /statsDecimal\.detail\.treeTotal/);
+	assert.match(source, /const subagentsCard =/);
+	assert.match(source, /detailCard\("subagents", t\("statsDecimal\.scope\.subagents"\), treeStatus, \[\], t\("statsDecimal\.detail\.noDescendants"\), null\)/);
+	assert.match(source, /detailCard\("subagents", t\("statsDecimal\.scope\.subagents"\), treeStatus, \[\], t\("statsDecimal\.detail\.subagentsMembershipUnknown"\), null\)/);
+	assert.match(source, /detailCard\("subagents", t\("statsDecimal\.scope\.subagents"\), treeStatus, subagentsDetailRows, treeNote, subagentsScope\?\.tokens, subagentsScope\?\.reasoningReported\)/);
+	assert.match(source, /const treeTotal = treeHasDescendants === true/);
+	assert.doesNotMatch(source, /treeScope\?\.coordinatorDirect/);
+	assert.doesNotMatch(source, /detailCard\("subagents".*treeScope\?\.tokens/);
+	assert.doesNotMatch(source, /detailCard\("subagents".*treeScope\?\.reasoningReported/);
+	assert.doesNotMatch(source, /detailSection\(/);
+});
+
+test("usage scopes detail exposes Subagents aggregate values only in the detail surface", () => {
+	const detailSection = source.indexOf("const detailRows =");
+	const compactSection = source.indexOf("const sessionCompact =");
+	assert.ok(compactSection >= 0);
+	assert.ok(detailSection > compactSection);
+	const compactSlice = source.slice(compactSection, detailSection);
+	assert.doesNotMatch(compactSlice, /Coordinator Direct|Subagents Aggregate|statsDecimal\.token\.|cacheHit|sessionCount|detail\.coverage/);
+	assert.match(source, /const subagentsScope = treeScope\?\.subagentsAggregate/);
+	assert.match(source, /subagentsScope\?\.tokens/);
+	assert.match(source, /statsDecimal\.scope\.subagents/);
+	assert.match(source, /statsDecimal\.token\.reasoning/);
+	assert.match(source, /const localNote =/);
+	assert.match(source, /detailCard\("local", t\("statsDecimal\.scope\.local"\), localStatus, localDetailRows, localNote, localScope\?\.tokens, localScope\?\.reasoningReported\)/);
+	assert.match(source, /const sessionNote =/);
+	const balanceStart = source.indexOf("const balanceCompact =");
+	const balanceEnd = source.indexOf("const compactPill =");
+	assert.ok(balanceStart >= 0 && balanceEnd > balanceStart);
+	assert.doesNotMatch(source.slice(balanceStart, balanceEnd), /statsDecimal\.label\.(cumulative|today)/);
+});
+
+test("compact Zone renders four scopes with status-aware values and no detail-only concepts", () => {
+	const react = {
+		Fragment: Symbol("Fragment"),
+		useState(initial) { return [typeof initial === "function" ? initial() : initial, () => {}]; },
+		useEffect(effect) { return effect(); },
+		useLayoutEffect() {},
+		useRef(initial) { return { current: initial }; },
+		createElement(type, props, ...children) { return { type, props: props ?? {}, children }; }
+	};
+	const { api } = loadBalanceTestApi(react);
+	const parsed = api.parseUsageScopes({
+		date: "2026-11-08",
+		timeZone: "Europe/Paris",
+		generatedAt: 123456,
+		session: {
+			status: "ready",
+			cumulative: { CNY: 9.2, USD: 1.25 },
+			today: { CNY: 3.6, USD: 0.5 },
+			tokens: null,
+			cacheHit: 0.5,
+			pricingKnown: true,
+			usageKnown: true
+		},
+		tree: {
+			status: "partial",
+			cumulative: { CNY: 24.9, USD: 3.4 },
+			today: { CNY: 8.8, USD: 1.2 },
+			tokens: null,
+			cacheHit: null,
+			pricingKnown: false,
+			usageKnown: true,
+			complete: false,
+			diagnostics: { external: true }
+		},
+		local: {
+			status: "unknown",
+			today: { CNY: 9.22, USD: 1.38 },
+			tokens: null,
+			cacheHit: null,
+			pricingKnown: false,
+			usageKnown: true,
+			sessionCount: 30
+		}
+	});
+	api.usageScopesEntries.set("zone-preview-session", {
+		sessionId: "zone-preview-session",
+		fastValue: parsed,
+		localValue: parsed,
+		fastRefreshing: false,
+		localRefreshing: false,
+		fastError: null,
+		localError: null,
+		listeners: new Set(),
+		releaseFast: null,
+		releaseLocal: null
+	});
+	const view = api.BillingStatus({
+		useProjection(name) {
+			return name === "billingLedger"
+				? {
+					enabled: true,
+					balanceEnabled: false,
+					currencies: ["USD", "CNY"],
+					peakHours: [],
+					publicHolidaySpans: [],
+					cumulative: { CNY: 0, USD: 0 },
+					today: { CNY: 0, USD: 0 },
+					pricingKnown: true
+				}
+				: { next: null, lastUsed: null };
+		},
+		t: (key) => key === "statsDecimal.compact.separator" ? " / " : key,
+		sessionId: "zone-preview-session"
+	});
+	const text = (node) => {
+		if (node === null || node === void 0 || typeof node === "boolean") return "";
+		if (typeof node === "string" || typeof node === "number") return String(node);
+		if (Array.isArray(node)) return node.map(text).join(" ");
+		if (node.type === "style") return "";
+		return (node.children ?? []).map(text).join(" ");
+	};
+	const rendered = text(view);
+	const findNode = (node, predicate) => {
+		if (node === null || node === void 0 || typeof node !== "object") return null;
+		if (Array.isArray(node)) {
+			for (const child of node) {
+				const found = findNode(child, predicate);
+				if (found !== null) return found;
+			}
+			return null;
+		}
+		if (predicate(node)) return node;
+		for (const child of node.children ?? []) {
+			const found = findNode(child, predicate);
+			if (found !== null) return found;
+		}
+		return null;
+	};
+	const trigger = findNode(view, (node) => node.props?.role === "button");
+	assert.ok(trigger);
+	assert.equal(trigger.props["aria-haspopup"], "dialog");
+	assert.equal(trigger.props["aria-expanded"], false);
+	assert.equal(typeof trigger.props.onClick, "function");
+	assert.equal(typeof trigger.props.onKeyDown, "function");
+	assert.equal(typeof trigger.props["aria-label"], "string");
+	assert.match(rendered, /statsDecimal\.compact\.session/);
+	assert.match(rendered, /statsDecimal\.compact\.subagents/);
+	assert.match(rendered, /statsDecimal\.compact\.local/);
+	assert.match(rendered, /statsDecimal\.compact\.balance/);
+	assert.match(rendered, /\$1\.25 \/ \$0\.50/);
+	assert.match(rendered, /statsDecimal\.compact\.partial/);
+	assert.match(rendered, /statsDecimal\.compact\.unknown/);
+	assert.match(rendered, /statsDecimal\.compact\.disabled/);
+	assert.doesNotMatch(rendered, /¥1\.25/);
+	assert.doesNotMatch(rendered, /¥9\.22/);
+	assert.doesNotMatch(rendered, /statsDecimal\.label\.(cumulative|today)/);
+	assert.doesNotMatch(rendered, /2026-11-08/);
+	assert.match(rendered, /statsDecimal\.periodWeekendOffPeak/);
+	assert.doesNotMatch(rendered, /Europe\/Paris/);
+	assert.doesNotMatch(rendered, /statsDecimal\.detail\.disclaimer/);
+	assert.doesNotMatch(rendered, /statsDecimal\.zone\.estimated/);
+	assert.doesNotMatch(rendered, /statsDecimal\.label\.direct/);
+	assert.doesNotMatch(rendered, /statsDecimal\.label\.subagents/);
+	assert.doesNotMatch(rendered, /statsDecimal\.detail\.tokens/);
+	assert.doesNotMatch(rendered, /statsDecimal\.detail\.diagnostics/);
+	assert.doesNotMatch(rendered, /zone-preview-session/);
+	assert.doesNotMatch(rendered, /source/);
+});
+
+test("token counts render as grouped integers without changing values", () => {
+	const { api } = loadBalanceTestApi();
+	assert.equal(api.formatTokenCount(2214866), "2,214,866");
+	assert.equal(api.formatTokenCount(252979328), "252,979,328");
+	assert.equal(api.formatTokenCount(811427456), "811,427,456");
+	assert.equal(api.formatTokenCount(0), "0");
+	assert.equal(api.formatTokenCount(-1), "–");
+	assert.equal(api.formatTokenCount(1.5), "–");
+});
+
+test("token rows stay sequential and distinguish unreported reasoning from a reported zero", () => {
+	const { api } = loadBalanceTestApi();
+	const tokens = { uncachedInput: 2214866, cacheRead: 252979328, cacheWrite: 0, output: 667221, reasoning: 0 };
+	const labels = (rows) => rows.map(([label]) => label);
+	const reported = api.zoneTokenRows(tokens, true, (key) => key);
+	const absent = api.zoneTokenRows(tokens, false, (key) => key);
+	const unknown = api.zoneTokenRows(tokens, null, (key) => key);
+	assert.equal(JSON.stringify(labels(reported)), JSON.stringify([
+		"statsDecimal.token.in",
+		"statsDecimal.token.cacheRead",
+		"statsDecimal.token.cacheWrite",
+		"statsDecimal.token.output",
+		"statsDecimal.token.reason"
+	]));
+	assert.equal(reported[0][1], "2,214,866");
+	assert.equal(reported[1][1], "252,979,328");
+	assert.equal(reported[4][1], "0");
+	const nonZero = api.zoneTokenRows({ ...tokens, reasoning: 1234 }, true, (key) => key);
+	assert.equal(nonZero[4][1], "1,234");
+	assert.equal(absent[4][1], "—");
+	assert.equal(unknown[4][1], "—");
+});
+
+test("detail density uses compact label/value grids and a permanent pricing-band pill", () => {
+	const { api } = loadBalanceTestApi();
+	assert.match(api.ZONE_CSS, /\.dsh-sd-detail-rows\{[^}]*grid-template-columns:minmax\(0,1fr\) auto/);
+	assert.match(api.ZONE_CSS, /\.dsh-sd-detail-row\{display:contents\}/);
+	assert.match(api.ZONE_CSS, /\.dsh-sd-detail-label\{[^}]*justify-self:start/);
+	assert.match(api.ZONE_CSS, /\.dsh-sd-detail-value\{[^}]*text-align:right[^}]*justify-self:end/);
+	assert.match(api.ZONE_CSS, /\.dsh-sd-token-list\{[^}]*grid-template-columns:minmax\(0,1fr\) auto/);
+	assert.match(api.ZONE_CSS, /\.dsh-sd-token-item\{display:contents\}/);
+	assert.match(api.ZONE_CSS, /\.dsh-sd-token-label\{[^}]*justify-self:start/);
+	assert.match(api.ZONE_CSS, /\.dsh-sd-token-value\{[^}]*text-align:right[^}]*justify-self:end/);
+	assert.match(api.ZONE_CSS, /\.dsh-sd-detail-label\{[^}]*min-width:0/);
+	assert.doesNotMatch(api.ZONE_CSS, /\.dsh-sd-detail-card-title\{[^}]*text-align:center/);
+	assert.doesNotMatch(api.ZONE_CSS, /\.dsh-sd-token-grid/);
+	assert.match(api.ZONE_CSS, /\.dsh-sd-band-row\{[^}]*justify-content:center/);
+	assert.match(api.ZONE_CSS, /\.dsh-sd-band-row \.dsh-sd-pill-period\{flex:0 1 auto\}/);
+	assert.match(api.ZONE_CSS, /\.dsh-sd-detail-grid\{[^}]*gap:7px 20px/);
+	assert.match(api.ZONE_CSS, /\.dsh-sd-pills\{[^}]*gap:4px 10px/);
+	assert.match(api.ZONE_CSS, /\.dsh-sd-pill\{[^}]*grid-template-columns:minmax\(0,1fr\) auto/);
+	assert.match(api.ZONE_CSS, /\.dsh-sd-pill-label\{[^}]*justify-self:start/);
+	assert.match(api.ZONE_CSS, /\.dsh-sd-pill-value-group\{[^}]*justify-self:end/);
+	assert.match(api.ZONE_CSS, /\.dsh-sd-pill-value\{[^}]*text-align:right/);
+	assert.match(source, /className: "dsh-sd-pill-value-group"/);
+	assert.match(source, /status === "partial" \? h\("span", \{ className: "dsh-sd-partial"/);
+	assert.match(source, /className: "dsh-sd-pill dsh-sd-pill-period"/);
+	assert.match(source, /h\("div", \{ className: "dsh-sd-band-row" \}, pricingPill\)/);
+	assert.match(source, /const compactPills = \[\s*compactPill\("session"/);
+	assert.match(source, /data-scope": "period"/);
+	assert.doesNotMatch(source, /const compactPills = \[\s*pricingPill,/);
+	assert.match(source, /className: "dsh-sd-detail-rows"/);
+	assert.match(source, /rows.length > 0 \? h\("div", \{ className: "dsh-sd-detail-rows"/);
+	assert.match(source, /className: "dsh-sd-token-list"/);
+	assert.match(source, /detailCard\("balance"/);
+	assert.doesNotMatch(source, /className: "dsh-sd-token-grid"/);
+});
+
+test("usage scopes parser preserves reasoning presence metadata", () => {
+	const { api } = loadBalanceTestApi();
+	const parsed = api.parseUsageScopes({
+		date: "2026-11-08",
+		timeZone: "Europe/Paris",
+		session: { status: "ready", cumulative: null, today: null, tokens: { uncachedInput: 1, cacheRead: 0, cacheWrite: 0, output: 1, reasoning: 0 }, reasoningReported: true, cacheHit: null, pricingKnown: true, usageKnown: true },
+		tree: { status: "ready", cumulative: null, today: null, tokens: null, reasoningReported: null, cacheHit: null, pricingKnown: true, usageKnown: true, hasDescendants: false, coordinatorDirect: null, subagentsAggregate: null, diagnostics: {} },
+		local: { status: "ready", today: null, tokens: null, reasoningReported: false, cacheHit: null, pricingKnown: true, usageKnown: true, sessionCount: 1 }
+	});
+	assert.equal(parsed.session.reasoningReported, true);
+	assert.equal(parsed.local.reasoningReported, false);
+	assert.equal(parsed.tree.reasoningReported, null);
 });

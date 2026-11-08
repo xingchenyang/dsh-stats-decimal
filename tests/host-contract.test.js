@@ -51,7 +51,7 @@ function loadHostApplyFromSource() {
 	return context.__applyHostForTest;
 }
 
-function makeBalanceRoute(options = {}) {
+async function makeBalanceRoute(options = {}) {
 	const { credentials, logs = [], serviceLookups = [] } = options;
 	const listeners = new Map();
 	const projectionListeners = new Set();
@@ -193,7 +193,7 @@ function makeBalanceRoute(options = {}) {
 		}
 	};
 	const balance = { enabled: options.enabled !== false };
-	applyHost(ctx, {
+	await applyHost(ctx, {
 		cnyEnabled: true,
 		usdEnabled: true,
 		balance
@@ -223,7 +223,7 @@ function makeBalanceRoute(options = {}) {
 	return route;
 }
 
-function makeSessionDailyRoute(sessionQuery) {
+async function makeSessionDailyRoute(sessionQuery) {
 	const routes = [];
 	const connection = {
 		fetch: {
@@ -248,7 +248,7 @@ function makeSessionDailyRoute(sessionQuery) {
 			callback(connectionCtx);
 		}
 	};
-	applyHost(ctx, {
+	await applyHost(ctx, {
 		enableCost: true,
 		cnyEnabled: true,
 		usdEnabled: true,
@@ -256,6 +256,44 @@ function makeSessionDailyRoute(sessionQuery) {
 	});
 	const route = routes.find((candidate) => candidate.path === "/api/stats-decimal/getSessionDailyCost");
 	assert.ok(route, "Host registers the authenticated session daily-cost route");
+	return route;
+}
+
+async function makeUsageScopesRoute(sessionQuery, subagents) {
+	const routes = [];
+	const connection = {
+		fetch: {
+			register(options) {
+				routes.push(options);
+				return () => {};
+			}
+		}
+	};
+	const connectionCtx = {
+		connection,
+		get(name) {
+			if (name === "sessionQuery") return sessionQuery;
+			if (name === "subagents") return subagents;
+			return undefined;
+		},
+		effect(effect) {
+			effect();
+		}
+	};
+	const ctx = {
+		sessionProjections: { register() {} },
+		inject(_dependencies, callback) {
+			callback(connectionCtx);
+		}
+	};
+	await applyHost(ctx, {
+		enableCost: true,
+		cnyEnabled: true,
+		usdEnabled: true,
+		balance: { enabled: false }
+	});
+	const route = routes.find((candidate) => candidate.path === "/api/stats-decimal/getUsageScopes");
+	assert.ok(route, "Host registers the authenticated usage scopes route");
 	return route;
 }
 
@@ -304,24 +342,22 @@ test("projection exposes period configuration and invalidates old cached prices"
 	assert.match(source, /peakHours: \[\.\.\.peakHours\]/);
 	assert.match(source, /publicHolidaySpans: holidaySpansForClient\(\)/);
 	assert.match(source, /publicHolidaySpans: zod\.array/);
-	assert.match(source, /stateVersion: 7/);
-	assert.match(source, /costOf\(buckets, model, band, currencies, table, timeEpochMs\)/);
-	assert.match(source, /const band = bandForTime\(event\.time, peakHours\);/);
-	assert.match(source, /const next = foldUsage\(base, buckets, model, band, activeCurrencies, table, true, event\.time\);/);
+	assert.match(source, /stateVersion: 8/);
+	assert.match(source, /const transition = applyUsageEvent\(state\.usage, event\);/);
 });
 
 test("the declared runtime dependencies activate real wire-schema validation", { skip: !hasRealWireSchema }, () => {
 	assert.equal(hasRealWireSchema, true);
 });
 
-	test("Host projection folds historical holiday usage at valley and wires labeled spans", () => {
+	test("Host projection folds historical holiday usage at valley and wires labeled spans", async () => {
 	const projections = [];
 	const ctx = {
 		sessionProjections: { register: (projection) => projections.push(projection) },
 		// Skip the unrelated optional balance-service registration in this fake Host.
 		inject: () => {}
 	};
-	applyHost(ctx, {
+	await applyHost(ctx, {
 		enableCost: true,
 		cnyEnabled: true,
 		usdEnabled: false,
@@ -359,6 +395,1174 @@ test("the declared runtime dependencies activate real wire-schema validation", {
 	}
 });
 
+function makeLifecycleContext(register, onDependent = () => {}) {
+	return {
+		sessionProjections: { register },
+		inject(dependencies, callback) {
+			assert.deepEqual(Array.from(dependencies), ["connection"]);
+			onDependent();
+			callback({
+				connection: { fetch: { register: () => () => {} } },
+				get() { return undefined; },
+				effect(effect) { effect(); }
+			});
+		}
+	};
+}
+
+async function makeBillingProjection(overrides = {}) {
+	let projection;
+	const ctx = {
+		sessionProjections: {
+			register(definition) {
+				projection = definition;
+				return () => {};
+			}
+		},
+		inject() {}
+	};
+	await applyHost(ctx, {
+		enableCost: true,
+		cnyEnabled: true,
+		usdEnabled: false,
+		balance: { enabled: false },
+		...overrides
+	});
+	assert.ok(projection, "Host registers the billing projection");
+	return projection;
+}
+
+function hostStreamUsage(usage) {
+	return [{ type: "chunk", time: 0, chunk: { type: "usage", usage } }];
+}
+
+function treeSnapshot(id, inheritedEventCount, events, extra = {}) {
+	return { session: { id, ...extra }, inheritedEventCount, events };
+}
+
+function treeRequestHeader(seq, time, model = "deepseek-flash", provider = "deepseek-official") {
+	return {
+		type: "request/header",
+		seq,
+		time,
+		data: { header: { config: { provider, model } }, reason: "initial" }
+	};
+}
+
+function treeMessage(seq, time, usage, model = "deepseek-flash", turn = 1, step = 1) {
+	return {
+		type: "assistant/message",
+		seq,
+		time,
+		data: {
+			turn,
+			step,
+			usage,
+			message: { source: { kind: "model", provider: "deepseek-official", model } },
+			stream: []
+		}
+	};
+}
+
+function treeAttempt(seq, time, usage, turn = 1, step = 1) {
+	return {
+		type: "assistant/attempt",
+		seq,
+		time,
+		data: { turn, step, stream: hostStreamUsage(usage) }
+	};
+}
+
+function treeRetryStarted(seq, time, turn = 1, step = 1) {
+	return { type: "llm/retry-started", seq, time, data: { turn, step, retry: 1, retryId: "retry-1" } };
+}
+
+function makeTreeSessionQuery(snapshots) {
+	const byId = new Map(snapshots.map((snapshot) => [snapshot.session.id, snapshot]));
+	return {
+		async listSessions() {
+			return snapshots.map((snapshot) => ({ header: { id: snapshot.session.id } }));
+		},
+		async readSession(id) {
+			const snapshot = byId.get(id);
+			if (snapshot === undefined) throw new Error(`unreadable test Session ${id}`);
+			return snapshot;
+		}
+	};
+}
+
+function makeTreeSubagents(rowsOrError) {
+	return {
+		async listDescendants() {
+			if (rowsOrError instanceof Error) throw rowsOrError;
+			return rowsOrError;
+		}
+	};
+}
+
+async function readUsageScopes(route, sessionId, timeZone = "Europe/Paris") {
+	const response = await makeRpcRequest(route, {
+		type: "client-request",
+		rpcId: `rpc-usage-scopes-${sessionId}`,
+		method: "stats-decimal/getUsageScopes",
+		payload: { force: true, timeZone, sessionId }
+	}, "getUsageScopes");
+	return (await response.json()).result.value;
+}
+
+async function readUsageScopesScoped(route, sessionId, scopes, force = true, timeZone = "Europe/Paris") {
+	const response = await makeRpcRequest(route, {
+		type: "client-request",
+		rpcId: `rpc-usage-scopes-scoped-${sessionId}`,
+		method: "stats-decimal/getUsageScopes",
+		payload: { force, timeZone, sessionId, scopes }
+	}, "getUsageScopes");
+	return { status: response.status, value: response.status === 200 ? (await response.json()).result.value : null };
+}
+
+function treeCost(usage, eventTime, model = "deepseek-flash") {
+	return costOf({
+		uncachedInputTokens: usage.inputTokens ?? 0,
+		cacheReadTokens: usage.cacheReadTokens ?? 0,
+		cacheWriteTokens: usage.cacheWriteTokens ?? 0,
+		outputTokens: usage.outputTokens ?? 0
+	}, model, bandForTime(eventTime, [9, 10, 11, 14, 15, 16, 17]), ["CNY", "USD"], undefined, eventTime);
+}
+
+test("billingLedger counts own attempt/retry usage and excludes inherited history", async () => {
+	const projection = await makeBillingProjection();
+	const eventTime = Date.UTC(2026, 8, 25, 1, 0, 0); // Holiday valley.
+	const inheritedUsage = { inputTokens: 9_000_000, outputTokens: 9_000 };
+	const ownFirstUsage = { inputTokens: 100, outputTokens: 10 };
+	const ownReplacedUsage = { inputTokens: 250, outputTokens: 25 };
+	const events = [
+		{
+			type: "assistant/message",
+			seq: 0,
+			time: eventTime,
+			data: { turn: 9, step: 1, usage: inheritedUsage, message: { source: { model: "deepseek-flash" } } }
+		},
+		{
+			type: "assistant/message",
+			seq: 1,
+			time: eventTime,
+			data: { turn: 9, step: 2, usage: inheritedUsage, message: { source: { model: "deepseek-flash" } } }
+		},
+		{
+			type: "request/header",
+			seq: 2,
+			time: eventTime,
+			data: { header: { config: { provider: "deepseek-official", model: "deepseek-flash" } }, reason: "resume" }
+		},
+		{
+			type: "assistant/attempt",
+			seq: 3,
+			time: eventTime,
+			data: { turn: 1, step: 1, stream: hostStreamUsage(ownFirstUsage) }
+		},
+		{
+			type: "llm/retry-started",
+			seq: 4,
+			time: eventTime,
+			data: { turn: 1, step: 1, retry: 1, retryId: "retry-1" }
+		},
+		{
+			type: "assistant/attempt",
+			seq: 5,
+			time: eventTime,
+			data: { turn: 1, step: 1, stream: hostStreamUsage({ inputTokens: 200, outputTokens: 20 }) }
+		},
+		{
+			type: "assistant/message",
+			seq: 6,
+			time: eventTime,
+			data: {
+				turn: 1,
+				step: 1,
+				usage: ownReplacedUsage,
+				message: { source: { kind: "model", provider: "deepseek-official", model: "deepseek-flash" } },
+				stream: []
+			}
+		}
+	];
+	let state = projection.init(undefined, 2);
+	for (const event of events) state = projection.apply(state, event);
+	assert.deepEqual(state.usage.tokens, {
+		uncachedInput: 350,
+		cacheRead: 0,
+		cacheWrite: 0,
+		output: 35,
+		reasoning: 0
+	});
+	const firstCost = costOf({ uncachedInputTokens: 100, outputTokens: 10 }, "deepseek-flash", bandForTime(eventTime, [9, 10, 11, 14, 15, 16, 17]), ["CNY"], undefined, eventTime);
+	const replacedCost = costOf({ uncachedInputTokens: 250, outputTokens: 25 }, "deepseek-flash", bandForTime(eventTime, [9, 10, 11, 14, 15, 16, 17]), ["CNY"], undefined, eventTime);
+	assert.equal(state.cumulative.CNY, firstCost.CNY + replacedCost.CNY);
+	assert.equal(state.today.CNY, firstCost.CNY + replacedCost.CNY);
+	assert.equal(state.pricingKnown, true);
+	assert.equal(state.usage.usageKnown, true);
+	assert.equal(projection.stateVersion, 8);
+	if (hasRealWireSchema) assert.deepEqual(projection.stateSchema.parse(state), state);
+});
+
+test("billingLedger keeps attempt usage but reports unknown cost without a model", async () => {
+	const projection = await makeBillingProjection();
+	const eventTime = Date.now();
+	const state = projection.apply(projection.init(), {
+		type: "assistant/attempt",
+		seq: 0,
+		time: eventTime,
+		data: { turn: 1, step: 1, stream: hostStreamUsage({ inputTokens: 100, outputTokens: 10 }) }
+	});
+	assert.deepEqual(state.usage.tokens, {
+		uncachedInput: 100,
+		cacheRead: 0,
+		cacheWrite: 0,
+		output: 10,
+		reasoning: 0
+	});
+	assert.equal(state.cumulative.CNY, 0);
+	assert.equal(state.pricingKnown, false);
+	assert.equal(state.usage.usageKnown, true);
+});
+
+test("Local Today uses own attempt/retry usage and excludes inherited history", async () => {
+	const sessionId = "session-local-today-fork";
+	const eventTime = Date.now();
+	const inheritedUsage = { inputTokens: 9_000_000, outputTokens: 9_000 };
+	const ownFirstUsage = { inputTokens: 100, outputTokens: 10 };
+	const ownReplacedUsage = { inputTokens: 250, outputTokens: 25 };
+	const sessionQuery = {
+		async listSessions() {
+			return [{ header: { id: sessionId, createdAt: 0 } }];
+		},
+		async readSession(id) {
+			assert.equal(id, sessionId);
+			return {
+				session: { id },
+				inheritedEventCount: 2,
+				events: [
+					{ type: "assistant/message", seq: 0, time: eventTime, data: { turn: 9, step: 1, usage: inheritedUsage, message: { source: { model: "deepseek-flash" } } } },
+					{ type: "assistant/message", seq: 1, time: eventTime, data: { turn: 9, step: 2, usage: inheritedUsage, message: { source: { model: "deepseek-flash" } } } },
+					{ type: "request/header", seq: 2, time: eventTime, data: { header: { config: { provider: "deepseek-official", model: "deepseek-flash" } }, reason: "resume" } },
+					{ type: "assistant/attempt", seq: 3, time: eventTime, data: { turn: 1, step: 1, stream: hostStreamUsage(ownFirstUsage) } },
+					{ type: "llm/retry-started", seq: 4, time: eventTime, data: { turn: 1, step: 1, retry: 1, retryId: "retry-1" } },
+					{ type: "assistant/attempt", seq: 5, time: eventTime, data: { turn: 1, step: 1, stream: hostStreamUsage({ inputTokens: 200, outputTokens: 20 }) } },
+					{ type: "assistant/message", seq: 6, time: eventTime, data: { turn: 1, step: 1, usage: ownReplacedUsage, message: { source: { kind: "model", provider: "deepseek-official", model: "deepseek-flash" } }, stream: [] } }
+				]
+			};
+		}
+	};
+	const route = await makeSessionDailyRoute(sessionQuery);
+	const response = await makeRpcRequest(route, {
+		type: "client-request",
+		rpcId: "rpc-local-today-fork",
+		method: "stats-decimal/getSessionDailyCost",
+		payload: { force: true, timeZone: "Europe/Paris", sessionId }
+	}, "getSessionDailyCost");
+	const body = await response.json();
+	const firstCost = costOf({ uncachedInputTokens: 100, outputTokens: 10 }, "deepseek-flash", bandForTime(eventTime, [9, 10, 11, 14, 15, 16, 17]), ["CNY", "USD"], undefined, eventTime);
+	const replacedCost = costOf({ uncachedInputTokens: 250, outputTokens: 25 }, "deepseek-flash", bandForTime(eventTime, [9, 10, 11, 14, 15, 16, 17]), ["CNY", "USD"], undefined, eventTime);
+	assert.equal(body.result.value.status, "ready");
+	assert.equal(body.result.value.sessionCount, 1);
+	assert.equal(body.result.value.currentSession.status, "ready");
+	assert.equal(body.result.value.currentSession.totals.CNY, firstCost.CNY + replacedCost.CNY);
+	assert.equal(body.result.value.currentSession.totals.USD, firstCost.USD + replacedCost.USD);
+	assert.equal(Object.hasOwn(body.result.value, "tokens"), false);
+	assert.equal(Object.hasOwn(body.result.value, "cacheHit"), false);
+	assert.equal(Object.hasOwn(body.result.value.currentSession, "tokens"), false);
+});
+
+test("Local Today counts an attempt-only Session created before the local date", async () => {
+	const sessionId = "session-local-today-attempt-only";
+	const eventTime = Date.now();
+	const sessionQuery = {
+		async listSessions() {
+			return [{ header: { id: sessionId, createdAt: 0 } }];
+		},
+		async readSession(id) {
+			return {
+				session: { id },
+				inheritedEventCount: 0,
+				events: [
+					{ type: "request/header", seq: 0, time: eventTime, data: { header: { config: { provider: "deepseek-official", model: "deepseek-flash" } }, reason: "initial" } },
+					{ type: "assistant/attempt", seq: 1, time: eventTime, data: { turn: 1, step: 1, stream: hostStreamUsage({ inputTokens: 100, outputTokens: 10 }) } }
+				]
+			};
+		}
+	};
+	const route = await makeSessionDailyRoute(sessionQuery);
+	const response = await makeRpcRequest(route, {
+		type: "client-request",
+		rpcId: "rpc-local-today-attempt",
+		method: "stats-decimal/getSessionDailyCost",
+		payload: { force: true, timeZone: "Europe/Paris", sessionId }
+	}, "getSessionDailyCost");
+	const body = await response.json();
+	assert.equal(body.result.value.status, "ready");
+	assert.equal(body.result.value.sessionCount, 1);
+	assert.equal(body.result.value.currentSession.status, "ready");
+	assert.ok(body.result.value.currentSession.totals.CNY > 0);
+});
+
+test("Local Today keeps usage but reports unknown cost when the attempt model is unavailable", async () => {
+	const sessionId = "session-local-today-unknown-model";
+	const eventTime = Date.now();
+	const sessionQuery = {
+		async listSessions() {
+			return [{ header: { id: sessionId, createdAt: 0 } }];
+		},
+		async readSession(id) {
+			return {
+				session: { id },
+				inheritedEventCount: 0,
+				events: [
+					{ type: "assistant/attempt", seq: 0, time: eventTime, data: { turn: 1, step: 1, stream: hostStreamUsage({ inputTokens: 100, outputTokens: 10 }) } }
+				]
+			};
+		}
+	};
+	const route = await makeSessionDailyRoute(sessionQuery);
+	const response = await makeRpcRequest(route, {
+		type: "client-request",
+		rpcId: "rpc-local-today-unknown-model",
+		method: "stats-decimal/getSessionDailyCost",
+		payload: { force: true, timeZone: "Europe/Paris", sessionId }
+	}, "getSessionDailyCost");
+	const body = await response.json();
+	assert.equal(body.result.value.status, "unknown");
+	assert.equal(body.result.value.sessionCount, 1);
+	assert.equal(body.result.value.currentSession.status, "unknown");
+	assert.deepEqual(body.result.value.currentSession.totals, { CNY: 0, USD: 0 });
+});
+
+test("Local Today reports unknown accounting for malformed usage", async () => {
+	const sessionId = "session-local-today-malformed";
+	const eventTime = Date.now();
+	const sessionQuery = {
+		async listSessions() {
+			return [{ header: { id: sessionId, createdAt: 0 } }];
+		},
+		async readSession(id) {
+			return {
+				session: { id },
+				inheritedEventCount: 0,
+				events: [
+					{
+						type: "assistant/message",
+						seq: 0,
+						time: eventTime,
+						data: {
+							turn: 1,
+							step: 1,
+							usage: { inputTokens: -1, outputTokens: 10 },
+							message: { source: { kind: "model", provider: "deepseek-official", model: "deepseek-flash" } },
+							stream: []
+						}
+					}
+				]
+			};
+		}
+	};
+	const route = await makeSessionDailyRoute(sessionQuery);
+	const response = await makeRpcRequest(route, {
+		type: "client-request",
+		rpcId: "rpc-local-today-malformed",
+		method: "stats-decimal/getSessionDailyCost",
+		payload: { force: true, timeZone: "Europe/Paris", sessionId }
+	}, "getSessionDailyCost");
+	const body = await response.json();
+	assert.equal(body.result.value.status, "unknown");
+	assert.equal(body.result.value.sessionCount, 1);
+	assert.equal(body.result.value.currentSession.status, "unknown");
+	assert.deepEqual(body.result.value.currentSession.totals, { CNY: 0, USD: 0 });
+});
+
+test("Local Today ignores historical unknown pricing that contributes nothing today", async () => {
+	const sessionId = "session-local-today-historical-unknown";
+	const eventTime = Date.now();
+	const previousDay = eventTime - 36 * 60 * 60 * 1000;
+	const sessionQuery = {
+		async listSessions() {
+			return [{ header: { id: sessionId, createdAt: 0 } }];
+		},
+		async readSession(id) {
+			return {
+				session: { id },
+				inheritedEventCount: 0,
+				events: [
+					treeMessage(0, previousDay, { inputTokens: 100, outputTokens: 10 }, "unpriced-test-model"),
+					treeMessage(1, eventTime, { inputTokens: 100, outputTokens: 10 })
+				]
+			};
+		}
+	};
+	const route = await makeSessionDailyRoute(sessionQuery);
+	const response = await makeRpcRequest(route, {
+		type: "client-request",
+		rpcId: "rpc-local-today-historical-unknown",
+		method: "stats-decimal/getSessionDailyCost",
+		payload: { force: true, timeZone: "Europe/Paris", sessionId }
+	}, "getSessionDailyCost");
+	const body = await response.json();
+	assert.equal(body.result.value.status, "ready");
+	assert.equal(body.result.value.currentSession.status, "ready");
+	assert.ok(body.result.value.currentSession.totals.CNY > 0);
+});
+
+test("Local Today ignores an unknown Session with no usage today", async () => {
+	const todayId = "session-local-today-known";
+	const historyId = "session-local-today-history-only";
+	const eventTime = Date.now();
+	const previousDay = eventTime - 36 * 60 * 60 * 1000;
+	const query = {
+		async listSessions() {
+			return [{ header: { id: todayId, createdAt: 0 } }, { header: { id: historyId, createdAt: 0 } }];
+		},
+		async readSession(id) {
+			if (id === todayId) {
+				return {
+					session: { id },
+					inheritedEventCount: 0,
+					events: [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]
+				};
+			}
+			return {
+				session: { id },
+				inheritedEventCount: 0,
+				events: [treeMessage(0, previousDay, { inputTokens: 100, outputTokens: 10 }, "unpriced-test-model")]
+			};
+		}
+	};
+	const route = await makeSessionDailyRoute(query);
+	const response = await makeRpcRequest(route, {
+		type: "client-request",
+		rpcId: "rpc-local-today-unrelated-unknown",
+		method: "stats-decimal/getSessionDailyCost",
+		payload: { force: true, timeZone: "Europe/Paris", sessionId: todayId }
+	}, "getSessionDailyCost");
+	const body = await response.json();
+	assert.equal(body.result.value.status, "ready");
+	assert.equal(body.result.value.currentSession.status, "ready");
+	assert.equal(body.result.value.sessionCount, 1);
+});
+
+test("Local Today resolves a complete replacement from an unpriced attempt to a priced message", async () => {
+	const sessionId = "session-local-today-replacement";
+	const eventTime = Date.now();
+	const sessionQuery = {
+		async listSessions() {
+			return [{ header: { id: sessionId, createdAt: 0 } }];
+		},
+		async readSession(id) {
+			return {
+				session: { id },
+				inheritedEventCount: 0,
+				events: [
+					treeAttempt(0, eventTime, { inputTokens: 100, outputTokens: 10 }),
+					treeMessage(1, eventTime, { inputTokens: 100, outputTokens: 10 })
+				]
+			};
+		}
+	};
+	const route = await makeSessionDailyRoute(sessionQuery);
+	const response = await makeRpcRequest(route, {
+		type: "client-request",
+		rpcId: "rpc-local-today-replacement",
+		method: "stats-decimal/getSessionDailyCost",
+		payload: { force: true, timeZone: "Europe/Paris", sessionId }
+	}, "getSessionDailyCost");
+	const body = await response.json();
+	assert.equal(body.result.value.status, "ready");
+	assert.equal(body.result.value.currentSession.status, "ready");
+	assert.ok(body.result.value.currentSession.totals.CNY > 0);
+});
+
+test("an inherited unknown prefix does not contaminate Local Today", async () => {
+	const sessionId = "session-local-today-inherited-unknown";
+	const eventTime = Date.now();
+	const sessionQuery = {
+		async listSessions() {
+			return [{ header: { id: sessionId, createdAt: 0 } }];
+		},
+		async readSession(id) {
+			return {
+				session: { id },
+				inheritedEventCount: 1,
+				events: [
+					treeMessage(0, eventTime - 36 * 60 * 60 * 1000, { inputTokens: 100, outputTokens: 10 }, "unpriced-test-model"),
+					treeMessage(1, eventTime, { inputTokens: 100, outputTokens: 10 })
+				]
+			};
+		}
+	};
+	const route = await makeSessionDailyRoute(sessionQuery);
+	const response = await makeRpcRequest(route, {
+		type: "client-request",
+		rpcId: "rpc-local-today-inherited-unknown",
+		method: "stats-decimal/getSessionDailyCost",
+		payload: { force: true, timeZone: "Europe/Paris", sessionId }
+	}, "getSessionDailyCost");
+	const body = await response.json();
+	assert.equal(body.result.value.status, "ready");
+	assert.equal(body.result.value.currentSession.status, "ready");
+	assert.ok(body.result.value.currentSession.totals.CNY > 0);
+});
+
+test("Local Today does not count inherited-only fork history as observed usage", async () => {	const sessionId = "session-local-today-inherited-only";
+	const eventTime = Date.now();
+	const sessionQuery = {
+		async listSessions() {
+			return [{ header: { id: sessionId, createdAt: 0 } }];
+		},
+		async readSession(id) {
+			return {
+				session: { id },
+				inheritedEventCount: 2,
+				events: [
+					{ type: "assistant/message", seq: 0, time: eventTime, data: { turn: 9, step: 1, usage: { inputTokens: 9_000_000, outputTokens: 9_000 }, message: { source: { model: "deepseek-flash" } } } },
+					{ type: "assistant/message", seq: 1, time: eventTime, data: { turn: 9, step: 2, usage: { inputTokens: 9_000_000, outputTokens: 9_000 }, message: { source: { model: "deepseek-flash" } } } }
+				]
+			};
+		}
+	};
+	const route = await makeSessionDailyRoute(sessionQuery);
+	const response = await makeRpcRequest(route, {
+		type: "client-request",
+		rpcId: "rpc-local-today-inherited-only",
+		method: "stats-decimal/getSessionDailyCost",
+		payload: { force: true, timeZone: "Europe/Paris", sessionId }
+	}, "getSessionDailyCost");
+	const body = await response.json();
+	assert.equal(body.result.value.status, "ready");
+	assert.equal(body.result.value.sessionCount, 0);
+	assert.deepEqual(body.result.value.totals, { CNY: 0, USD: 0 });
+});
+
+
+test("usage scopes keeps Tree Today and Local Today independent", async () => {
+	const eventTime = Date.now();
+	const root = treeSnapshot("root-independent", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]);
+	const outside = treeSnapshot("outside-tree", 0, [treeMessage(0, eventTime, { inputTokens: 200, outputTokens: 20 })]);
+	const query = makeTreeSessionQuery([root, outside]);
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents([]));
+	const value = await readUsageScopes(route, "root-independent");
+	const rootCost = treeCost({ inputTokens: 100, outputTokens: 10 }, eventTime);
+	const outsideCost = treeCost({ inputTokens: 200, outputTokens: 20 }, eventTime);
+	assert.equal(value.tree.today.CNY, rootCost.CNY);
+	assert.equal(value.local.today.CNY, rootCost.CNY + outsideCost.CNY);
+	assert.equal(value.local.sessionCount, 2);
+});
+
+test("usage scopes keeps Local Today ready when another Session has only historical unknown pricing", async () => {
+	const eventTime = Date.now();
+	const previousDay = eventTime - 36 * 60 * 60 * 1000;
+	const root = treeSnapshot("root-local-history-known", 0, [
+		treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })
+	]);
+	const historyOnly = treeSnapshot("outside-local-history-unknown", 0, [
+		treeMessage(0, previousDay, { inputTokens: 100, outputTokens: 10 }, "unpriced-test-model")
+	]);
+	const query = makeTreeSessionQuery([root, historyOnly]);
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents([]));
+	const value = await readUsageScopes(route, "root-local-history-known");
+	assert.equal(value.local.status, "ready");
+	assert.equal(value.local.pricingKnown, true);
+	assert.equal(value.local.sessionCount, 1);
+	assert.ok(value.local.today.CNY > 0);
+});
+
+test("usage scopes reuses root and child snapshots for Local Today instead of reading them twice", async () => {
+	const eventTime = Date.now();
+	const root = treeSnapshot("root-reuse", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]);
+	const child = treeSnapshot("child-reuse", 0, [treeMessage(0, eventTime, { inputTokens: 200, outputTokens: 20 })]);
+	const outside = treeSnapshot("outside-reuse", 0, [treeMessage(0, eventTime, { inputTokens: 300, outputTokens: 30 })]);
+	const query = makeTreeSessionQuery([root, child, outside]);
+	const reads = new Map();
+	const originalRead = query.readSession.bind(query);
+	query.readSession = async (id) => {
+		reads.set(id, (reads.get(id) ?? 0) + 1);
+		return originalRead(id);
+	};
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents([
+		{ kind: "child", id: child.session.id, parentId: root.session.id, depth: 1, mode: "one-shot", activity: "inactive", hasChildren: false }
+	]));
+	const value = await readUsageScopes(route, root.session.id);
+	assert.equal(value.local.sessionCount, 3);
+	assert.equal(reads.get(root.session.id), 1);
+	assert.equal(reads.get(child.session.id), 1);
+	assert.equal(reads.get(outside.session.id), 1);
+});
+
+test("usage scopes cache hit returns the prior result without rereading Sessions", async () => {
+	const eventTime = Date.now();
+	const root = treeSnapshot("root-cache-hit", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]);
+	const query = makeTreeSessionQuery([root]);
+	let reads = 0;
+	const originalRead = query.readSession.bind(query);
+	query.readSession = async (id) => {
+		reads += 1;
+		return originalRead(id);
+	};
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents([]));
+	const body = {
+		type: "client-request",
+		rpcId: "rpc-usage-cache-hit",
+		method: "stats-decimal/getUsageScopes",
+		payload: { force: false, timeZone: "Europe/Paris", sessionId: root.session.id }
+	};
+	const first = await (await makeRpcRequest(route, body, "getUsageScopes")).json();
+	const readsAfterFirst = reads;
+	const second = await (await makeRpcRequest(route, body, "getUsageScopes")).json();
+	assert.equal(second.result.value.local.today.CNY, first.result.value.local.today.CNY);
+	assert.equal(reads, readsAfterFirst);
+});
+
+test("usage scopes fast selection does not run the Local Today corpus scan", async () => {
+	const eventTime = Date.now();
+	const root = treeSnapshot("root-fast-only", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]);
+	const query = makeTreeSessionQuery([root]);
+	query.listSessions = async () => { throw new Error("Local Today must not be invoked"); };
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents([]));
+	const result = await readUsageScopesScoped(route, root.session.id, ["session", "tree"]);
+	assert.equal(result.status, 200);
+	assert.equal(result.value.local, null);
+	assert.equal(result.value.session.status, "ready");
+	assert.equal(result.value.tree.status, "ready");
+	assert.equal(result.value.tree.hasDescendants, false);
+});
+
+test("usage scopes local selection does not run Tree membership", async () => {
+	const eventTime = Date.now();
+	const root = treeSnapshot("root-local-only", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]);
+	const query = makeTreeSessionQuery([root]);
+	const route = await makeUsageScopesRoute(query, {
+		async listDescendants() { throw new Error("Tree membership must not be invoked"); }
+	});
+	const result = await readUsageScopesScoped(route, root.session.id, ["local"]);
+	assert.equal(result.status, 200);
+	assert.equal(result.value.session, null);
+	assert.equal(result.value.tree, null);
+	assert.equal(result.value.local.status, "ready");
+	assert.ok(result.value.local.today.CNY > 0);
+});
+
+test("usage scopes Local Today cache survives a different root Session", async () => {
+	const eventTime = Date.now();
+	const first = treeSnapshot("root-cache-local-a", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]);
+	const second = treeSnapshot("root-cache-local-b", 0, [treeMessage(0, eventTime, { inputTokens: 200, outputTokens: 20 })]);
+	const query = makeTreeSessionQuery([first, second]);
+	let lists = 0;
+	const originalList = query.listSessions.bind(query);
+	query.listSessions = async () => { lists += 1; return originalList(); };
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents([]));
+	const firstValue = await readUsageScopesScoped(route, first.session.id, ["local"], false);
+	const listsAfterFirst = lists;
+	const secondValue = await readUsageScopesScoped(route, second.session.id, ["local"], false);
+	assert.equal(firstValue.status, 200);
+	assert.equal(secondValue.status, 200);
+	assert.equal(lists, listsAfterFirst);
+	assert.equal(secondValue.value.local.today.CNY, firstValue.value.local.today.CNY);
+});
+
+test("usage scopes omitted selection preserves the full legacy response", async () => {
+	const eventTime = Date.now();
+	const root = treeSnapshot("root-legacy-full", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]);
+	const route = await makeUsageScopesRoute(makeTreeSessionQuery([root]), makeTreeSubagents([]));
+	const value = await readUsageScopes(route, root.session.id);
+	assert.equal(value.session.status, "ready");
+	assert.equal(value.tree.status, "ready");
+	assert.equal(value.local.status, "ready");
+	assert.equal(value.tree.hasDescendants, false);
+});
+
+test("usage scopes rejects an empty or unknown scope selection", async () => {
+	const eventTime = Date.now();
+	const root = treeSnapshot("root-invalid-scopes", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]);
+	const route = await makeUsageScopesRoute(makeTreeSessionQuery([root]), makeTreeSubagents([]));
+	const empty = await readUsageScopesScoped(route, root.session.id, []);
+	const unknown = await readUsageScopesScoped(route, root.session.id, ["session", "bogus"]);
+	assert.equal(empty.status, 400);
+	assert.equal(unknown.status, 400);
+});
+
+test("usage scopes exposes authoritative hasDescendants empty/true/unavailable", async () => {
+	const eventTime = Date.now();
+	const root = treeSnapshot("root-has-descendants", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]);
+	const child = treeSnapshot("child-has-descendants", 0, [treeMessage(0, eventTime, { inputTokens: 200, outputTokens: 20 })]);
+	const emptyRoute = await makeUsageScopesRoute(makeTreeSessionQuery([root]), makeTreeSubagents([]));
+	const empty = await readUsageScopes(emptyRoute, root.session.id);
+	assert.equal(empty.tree.hasDescendants, false);
+
+	const childRoute = await makeUsageScopesRoute(makeTreeSessionQuery([root, child]), makeTreeSubagents([
+		{ kind: "child", id: child.session.id, parentId: root.session.id, depth: 1, mode: "one-shot", activity: "inactive", hasChildren: false }
+	]));
+	const withChild = await readUsageScopes(childRoute, root.session.id);
+	assert.equal(withChild.tree.hasDescendants, true);
+
+	const externalRoute = await makeUsageScopesRoute(makeTreeSessionQuery([root, child]), makeTreeSubagents([
+		{ kind: "child", id: child.session.id, parentId: root.session.id, depth: 1, mode: "external", activity: "inactive", hasChildren: false }
+	]));
+	const external = await readUsageScopes(externalRoute, root.session.id);
+	assert.equal(external.tree.hasDescendants, true);
+
+	const unavailableRoute = await makeUsageScopesRoute(makeTreeSessionQuery([root]), makeTreeSubagents(new Error("unavailable")));
+	const unavailable = await readUsageScopes(unavailableRoute, root.session.id);
+	assert.equal(unavailable.tree.hasDescendants, null);
+});
+
+test("usage scopes carries reasoning presence without changing token totals", async () => {
+	const eventTime = Date.now();
+	const explicitZero = treeSnapshot("root-reasoning-zero", 0, [
+		treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10, reasoningTokens: 0 })
+	]);
+	const zeroRoute = await makeUsageScopesRoute(makeTreeSessionQuery([explicitZero]), makeTreeSubagents([]));
+	const zero = await readUsageScopes(zeroRoute, explicitZero.session.id);
+	assert.equal(zero.session.reasoningReported, true);
+	assert.equal(zero.tree.reasoningReported, true);
+	assert.equal(zero.local.reasoningReported, true);
+	assert.equal(zero.session.tokens.reasoning, 0);
+
+	const absent = treeSnapshot("root-reasoning-absent", 0, [
+		treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })
+	]);
+	const absentRoute = await makeUsageScopesRoute(makeTreeSessionQuery([absent]), makeTreeSubagents([]));
+	const missing = await readUsageScopes(absentRoute, absent.session.id);
+	assert.equal(missing.session.reasoningReported, false);
+	assert.equal(missing.local.reasoningReported, false);
+
+	const nonZero = treeSnapshot("root-reasoning-nonzero", 0, [
+		treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10, reasoningTokens: 4 })
+	]);
+	const nonZeroRoute = await makeUsageScopesRoute(makeTreeSessionQuery([nonZero]), makeTreeSubagents([]));
+	const value = await readUsageScopes(nonZeroRoute, nonZero.session.id);
+	assert.equal(value.session.reasoningReported, true);
+	assert.equal(value.session.tokens.reasoning, 4);
+	assert.equal(
+		value.session.cumulative.CNY,
+		treeCost({ inputTokens: 100, outputTokens: 10 }, eventTime).CNY
+	);
+});
+
+test("Local Today uses observeSession without per-session listing preflights", async () => {
+	const eventTime = Date.now();
+	const root = treeSnapshot("root-observe", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]);
+	const outside = treeSnapshot("outside-observe", 0, [treeMessage(0, eventTime, { inputTokens: 200, outputTokens: 20 })]);
+	const seeded = treeSnapshot("seeded-observe", 1, [
+		treeMessage(0, eventTime, { inputTokens: 9_000, outputTokens: 900 }, "unpriced-test-model"),
+		treeMessage(1, eventTime, { inputTokens: 300, outputTokens: 30 })
+	]);
+	const snapshots = [root, outside, seeded];
+	const query = makeTreeSessionQuery(snapshots);
+	let listCalls = 0;
+	let observeCalls = 0;
+	let readCalls = 0;
+	let disposeCalls = 0;
+	query.listSessions = async () => {
+		listCalls += 1;
+		return snapshots.map((snapshot) => ({ header: { id: snapshot.session.id } }));
+	};
+	query.readSession = async (id) => {
+		readCalls += 1;
+		return snapshots.find((snapshot) => snapshot.session.id === id);
+	};
+	query.observeSession = async (id) => {
+		observeCalls += 1;
+		const snapshot = snapshots.find((item) => item.session.id === id);
+		return {
+			header: snapshot.session,
+			inheritedEventCount: snapshot.inheritedEventCount,
+			events: snapshot.events,
+			[Symbol.dispose]: () => { disposeCalls += 1; }
+		};
+	};
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents([]));
+	const local = (await readUsageScopesScoped(route, root.session.id, ["local"])).value.local;
+	const authoritativeRoute = await makeUsageScopesRoute(makeTreeSessionQuery(snapshots), makeTreeSubagents([]));
+	const authoritative = (await readUsageScopesScoped(authoritativeRoute, root.session.id, ["local"])).value.local;
+	assert.equal(local.sessionCount, authoritative.sessionCount);
+	assert.equal(local.today.CNY, authoritative.today.CNY);
+	assert.equal(local.today.USD, authoritative.today.USD);
+	assert.equal(local.tokens.reasoning, authoritative.tokens.reasoning);
+	assert.equal(local.pricingKnown, authoritative.pricingKnown);
+	assert.equal(listCalls, 1);
+	assert.equal(observeCalls, 3);
+	assert.equal(readCalls, 0);
+	assert.equal(disposeCalls, 3);
+});
+
+test("usage scopes treats a proven empty tree as ready and root-only", async () => {
+	const eventTime = Date.now();
+	const usage = { inputTokens: 100, outputTokens: 10 };
+	const root = treeSnapshot("root-empty", 0, [
+		treeRequestHeader(0, eventTime),
+		treeMessage(1, eventTime, usage)
+	]);
+	const query = makeTreeSessionQuery([root]);
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents([]));
+	const value = await readUsageScopes(route, "root-empty");
+	const expected = treeCost(usage, eventTime);
+	assert.equal(value.tree.status, "ready");
+	assert.equal(value.tree.complete, true);
+	assert.equal(value.tree.usageKnown, true);
+	assert.equal(value.tree.pricingKnown, true);
+	assert.deepEqual(value.tree.subagentsAggregate.cumulative, { CNY: 0, USD: 0 });
+	assert.deepEqual(value.tree.subagentsAggregate.today, { CNY: 0, USD: 0 });
+	assert.equal(value.tree.cumulative.CNY, expected.CNY);
+	assert.equal(value.tree.today.CNY, expected.CNY);
+	assert.equal(value.tree.coordinatorDirect.cumulative.CNY, expected.CNY);
+	assert.equal(value.tree.tokens.uncachedInput, 100);
+	assert.equal(value.session.status, "ready");
+	assert.ok(Number.isSafeInteger(value.generatedAt));
+});
+
+test("usage scopes sums one direct child exactly once", async () => {
+	const eventTime = Date.now();
+	const rootUsage = { inputTokens: 100, outputTokens: 10 };
+	const childUsage = { inputTokens: 200, outputTokens: 20 };
+	const root = treeSnapshot("root-direct", 0, [treeMessage(0, eventTime, rootUsage)]);
+	const child = treeSnapshot("child-direct", 0, [treeMessage(0, eventTime, childUsage)]);
+	const query = makeTreeSessionQuery([root, child]);
+	const subagents = makeTreeSubagents([
+		{ kind: "child", id: "child-direct", parentId: "root-direct", depth: 1, mode: "one-shot", activity: "inactive", hasChildren: false }
+	]);
+	const route = await makeUsageScopesRoute(query, subagents);
+	const value = await readUsageScopes(route, "root-direct");
+	const rootCost = treeCost(rootUsage, eventTime);
+	const childCost = treeCost(childUsage, eventTime);
+	assert.equal(value.tree.status, "ready");
+	assert.equal(value.tree.cumulative.CNY, rootCost.CNY + childCost.CNY);
+	assert.equal(value.tree.today.CNY, rootCost.CNY + childCost.CNY);
+	assert.equal(value.tree.coordinatorDirect.cumulative.CNY, rootCost.CNY);
+	assert.equal(value.tree.subagentsAggregate.cumulative.CNY, childCost.CNY);
+	assert.equal(value.tree.tokens.uncachedInput, 300);
+	assert.equal(value.tree.tokens.uncachedInput, value.tree.coordinatorDirect.tokens.uncachedInput + value.tree.subagentsAggregate.tokens.uncachedInput);
+});
+
+test("usage scopes includes nested descendants without double counting", async () => {
+	const eventTime = Date.now();
+	const root = treeSnapshot("root-nested", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]);
+	const childA = treeSnapshot("child-a", 0, [treeMessage(0, eventTime, { inputTokens: 200, outputTokens: 20 })]);
+	const childB = treeSnapshot("child-b", 0, [treeMessage(0, eventTime, { inputTokens: 300, outputTokens: 30 })]);
+	const query = makeTreeSessionQuery([root, childA, childB]);
+	const subagents = makeTreeSubagents([
+		{ kind: "child", id: "child-a", parentId: "root-nested", depth: 1, mode: "continuable", activity: "inactive", hasChildren: true },
+		{ kind: "child", id: "child-b", parentId: "child-a", depth: 2, mode: "one-shot", activity: "inactive", hasChildren: false }
+	]);
+	const route = await makeUsageScopesRoute(query, subagents);
+	const value = await readUsageScopes(route, "root-nested");
+	const rootCost = treeCost({ inputTokens: 100, outputTokens: 10 }, eventTime);
+	const aCost = treeCost({ inputTokens: 200, outputTokens: 20 }, eventTime);
+	const bCost = treeCost({ inputTokens: 300, outputTokens: 30 }, eventTime);
+	assert.equal(value.tree.status, "ready");
+	assert.equal(value.tree.cumulative.CNY, rootCost.CNY + aCost.CNY + bCost.CNY);
+	assert.equal(value.tree.subagentsAggregate.cumulative.CNY, aCost.CNY + bCost.CNY);
+	assert.equal(value.tree.tokens.uncachedInput, 600);
+	assert.equal(value.tree.tokens.uncachedInput, value.tree.coordinatorDirect.tokens.uncachedInput + value.tree.subagentsAggregate.tokens.uncachedInput);
+	assert.equal(value.tree.cumulative.CNY, value.tree.coordinatorDirect.cumulative.CNY + value.tree.subagentsAggregate.cumulative.CNY);
+	assert.equal(value.tree.today.CNY, value.tree.coordinatorDirect.today.CNY + value.tree.subagentsAggregate.today.CNY);
+});
+
+test("usage scopes excludes a fork-seeded descendant's inherited prefix", async () => {
+	const eventTime = Date.now();
+	const root = treeSnapshot("root-fork", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]);
+	const inherited = { inputTokens: 9_000_000, outputTokens: 9_000 };
+	const child = treeSnapshot("child-fork", 2, [
+		treeMessage(0, eventTime, inherited, "deepseek-flash", 9, 1),
+		treeMessage(1, eventTime, inherited, "deepseek-flash", 9, 2),
+		treeMessage(2, eventTime, { inputTokens: 200, outputTokens: 20 })
+	]);
+	const query = makeTreeSessionQuery([root, child]);
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents([
+		{ kind: "child", id: "child-fork", parentId: "root-fork", depth: 1, mode: "one-shot", activity: "inactive", hasChildren: false }
+	]));
+	const value = await readUsageScopes(route, "root-fork");
+	const rootCost = treeCost({ inputTokens: 100, outputTokens: 10 }, eventTime);
+	const childCost = treeCost({ inputTokens: 200, outputTokens: 20 }, eventTime);
+	assert.equal(value.tree.cumulative.CNY, rootCost.CNY + childCost.CNY);
+	assert.equal(value.tree.today.CNY, rootCost.CNY + childCost.CNY);
+	assert.equal(value.tree.tokens.uncachedInput, 300);
+});
+
+test("usage scopes preserves attempt/retry semantics for a descendant", async () => {
+	const eventTime = Date.now();
+	const root = treeSnapshot("root-retry", 0, []);
+	const child = treeSnapshot("child-retry", 0, [
+		treeRequestHeader(0, eventTime),
+		treeAttempt(1, eventTime, { inputTokens: 100, outputTokens: 10 }),
+		treeRetryStarted(2, eventTime),
+		treeAttempt(3, eventTime, { inputTokens: 200, outputTokens: 20 }),
+		treeMessage(4, eventTime, { inputTokens: 250, outputTokens: 25 })
+	]);
+	const query = makeTreeSessionQuery([root, child]);
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents([
+		{ kind: "child", id: "child-retry", parentId: "root-retry", depth: 1, mode: "one-shot", activity: "inactive", hasChildren: false }
+	]));
+	const value = await readUsageScopes(route, "root-retry");
+	const first = treeCost({ inputTokens: 100, outputTokens: 10 }, eventTime);
+	const final = treeCost({ inputTokens: 250, outputTokens: 25 }, eventTime);
+	assert.equal(value.tree.status, "ready");
+	assert.equal(value.tree.subagentsAggregate.cumulative.CNY, first.CNY + final.CNY);
+	assert.equal(value.tree.subagentsAggregate.tokens.uncachedInput, 350);
+});
+
+test("usage scopes reads a cold historical child from durable Session data", async () => {
+	const eventTime = Date.now();
+	const root = treeSnapshot("root-cold", 0, []);
+	const child = treeSnapshot("child-cold", 0, [treeMessage(0, eventTime, { inputTokens: 400, outputTokens: 40 })]);
+	const query = makeTreeSessionQuery([root, child]);
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents([
+		{ kind: "child", id: "child-cold", parentId: "root-cold", depth: 1, mode: "one-shot", activity: "inactive", hasChildren: false }
+	]));
+	const value = await readUsageScopes(route, "root-cold");
+	assert.equal(value.tree.status, "ready");
+	assert.equal(value.tree.subagentsAggregate.tokens.uncachedInput, 400);
+});
+
+test("usage scopes marks external and unreadable descendants partial without fabricating usage", async () => {
+	const eventTime = Date.now();
+	const root = treeSnapshot("root-partial", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]);
+	const query = makeTreeSessionQuery([root]);
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents([
+		{ kind: "child", id: "external-child", parentId: "root-partial", depth: 1, mode: "external", activity: "inactive", hasChildren: false },
+		{ kind: "child", id: "missing-child", parentId: "root-partial", depth: 1, mode: "one-shot", activity: "inactive", hasChildren: false }
+	]));
+	const value = await readUsageScopes(route, "root-partial");
+	const rootCost = treeCost({ inputTokens: 100, outputTokens: 10 }, eventTime);
+	assert.equal(value.tree.status, "partial");
+	assert.equal(value.tree.complete, false);
+	assert.equal(value.tree.diagnostics.external, true);
+	assert.equal(value.tree.diagnostics.unreadable, true);
+	assert.equal(value.tree.cumulative.CNY, rootCost.CNY);
+	assert.deepEqual(value.tree.subagentsAggregate.cumulative, { CNY: 0, USD: 0 });
+});
+
+test("usage scopes gives partial precedence over unknown pricing", async () => {
+	const eventTime = Date.now();
+	const root = treeSnapshot("root-precedence", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]);
+	const unknownChild = treeSnapshot("child-precedence", 0, [treeMessage(0, eventTime, { inputTokens: 500, outputTokens: 50 }, "unpriced-test-model")]);
+	const query = makeTreeSessionQuery([root, unknownChild]);
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents([
+		{ kind: "child", id: "child-precedence", parentId: "root-precedence", depth: 1, mode: "one-shot", activity: "inactive", hasChildren: false },
+		{ kind: "child", id: "external-precedence", parentId: "root-precedence", depth: 1, mode: "external", activity: "inactive", hasChildren: false }
+	]));
+	const value = await readUsageScopes(route, "root-precedence");
+	assert.equal(value.tree.status, "partial");
+	assert.equal(value.tree.complete, false);
+	assert.equal(value.tree.pricingKnown, false);
+	assert.equal(value.tree.subagentsAggregate.tokens.uncachedInput, 500);
+});
+
+test("usage scopes preserves corrupt diagnostics and never reports ready", async () => {	const eventTime = Date.now();
+	const root = treeSnapshot("root-corrupt", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]);
+	const query = makeTreeSessionQuery([root]);
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents([
+		{ kind: "diagnostic", id: "corrupt-child", parentId: "root-corrupt", depth: 1, reason: "corrupt" },
+		{ kind: "diagnostic", id: "unsupported-child", parentId: "root-corrupt", depth: 1, reason: "unsupported" }
+	]));
+	const value = await readUsageScopes(route, "root-corrupt");
+	assert.equal(value.tree.status, "partial");
+	assert.equal(value.tree.complete, false);
+	assert.equal(value.tree.diagnostics.corrupt, true);
+	assert.equal(value.tree.diagnostics.unsupported, true);
+	assert.equal(value.tree.cumulative.CNY, treeCost({ inputTokens: 100, outputTokens: 10 }, eventTime).CNY);
+});
+
+test("usage scopes reports unavailable when authoritative membership is unavailable", async () => {
+	const eventTime = Date.now();
+	const root = treeSnapshot("root-membership", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]);
+	const query = makeTreeSessionQuery([root]);
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents(new Error("subagent listing unavailable")));
+	const value = await readUsageScopes(route, "root-membership");
+	assert.equal(value.tree.status, "unavailable");
+	assert.equal(value.tree.complete, false);
+	assert.equal(value.tree.cumulative, null);
+	assert.equal(value.tree.diagnostics.membershipUnavailable, true);
+	assert.equal(value.session.status, "ready");
+});
+
+test("usage scopes keeps unknown-priced descendant tokens but cannot become ready", async () => {
+	const eventTime = Date.now();
+	const root = treeSnapshot("root-unknown-price", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]);
+	const child = treeSnapshot("child-unknown-price", 0, [treeMessage(0, eventTime, { inputTokens: 500, outputTokens: 50 }, "unpriced-test-model")]);
+	const query = makeTreeSessionQuery([root, child]);
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents([
+		{ kind: "child", id: "child-unknown-price", parentId: "root-unknown-price", depth: 1, mode: "one-shot", activity: "inactive", hasChildren: false }
+	]));
+	const value = await readUsageScopes(route, "root-unknown-price");
+	assert.equal(value.tree.status, "unknown");
+	assert.equal(value.tree.complete, true);
+	assert.equal(value.tree.pricingKnown, false);
+	assert.equal(value.tree.subagentsAggregate.tokens.uncachedInput, 500);
+	assert.deepEqual(value.tree.subagentsAggregate.cumulative, { CNY: 0, USD: 0 });
+});
+
+test("usage scopes keeps malformed descendant usage unknown", async () => {
+	const eventTime = Date.now();
+	const root = treeSnapshot("root-malformed", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]);
+	const child = treeSnapshot("child-malformed", 0, [treeMessage(0, eventTime, { inputTokens: -1, outputTokens: 10 })]);
+	const query = makeTreeSessionQuery([root, child]);
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents([
+		{ kind: "child", id: "child-malformed", parentId: "root-malformed", depth: 1, mode: "one-shot", activity: "inactive", hasChildren: false }
+	]));
+	const value = await readUsageScopes(route, "root-malformed");
+	assert.equal(value.tree.status, "unknown");
+	assert.equal(value.tree.usageKnown, false);
+	assert.equal(value.tree.pricingKnown, false);
+	assert.equal(value.tree.subagentsAggregate.tokens.uncachedInput, 0);
+});
+
+test("usage scopes treats the requested Session as the explicit tree root, even if it is a subagent", async () => {
+	const eventTime = Date.now();
+	const parent = treeSnapshot("historical-parent", 0, [treeMessage(0, eventTime, { inputTokens: 9_000_000, outputTokens: 9_000 })]);
+	const root = treeSnapshot("current-subagent-root", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })], { parentSession: "historical-parent", origin: "subagent", delegationDepth: 1 });
+	const child = treeSnapshot("grandchild", 0, [treeMessage(0, eventTime, { inputTokens: 200, outputTokens: 20 })]);
+	const query = makeTreeSessionQuery([parent, root, child]);
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents([
+		{ kind: "child", id: "grandchild", parentId: "current-subagent-root", depth: 1, mode: "one-shot", activity: "inactive", hasChildren: false }
+	]));
+	const value = await readUsageScopes(route, "current-subagent-root");
+	const rootCost = treeCost({ inputTokens: 100, outputTokens: 10 }, eventTime);
+	const childCost = treeCost({ inputTokens: 200, outputTokens: 20 }, eventTime);
+	assert.equal(value.tree.cumulative.CNY, rootCost.CNY + childCost.CNY);
+	assert.equal(value.tree.coordinatorDirect.cumulative.CNY, rootCost.CNY);
+});
+
+test("usage scopes protects against duplicate descendant rows", async () => {
+	const eventTime = Date.now();
+	const root = treeSnapshot("root-duplicate", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]);
+	const child = treeSnapshot("child-duplicate", 0, [treeMessage(0, eventTime, { inputTokens: 200, outputTokens: 20 })]);
+	const query = makeTreeSessionQuery([root, child]);
+	const duplicateRow = { kind: "child", id: "child-duplicate", parentId: "root-duplicate", depth: 1, mode: "one-shot", activity: "inactive", hasChildren: false };
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents([duplicateRow, duplicateRow]));
+	const value = await readUsageScopes(route, "root-duplicate");
+	const childCost = treeCost({ inputTokens: 200, outputTokens: 20 }, eventTime);
+	assert.equal(value.tree.status, "partial");
+	assert.equal(value.tree.diagnostics.duplicate, true);
+	assert.equal(value.tree.subagentsAggregate.cumulative.CNY, childCost.CNY);
+});
+
+test("usage scopes Tree Today uses own event dates, not Session creation dates", async () => {
+	const now = Date.now();
+	const yesterday = now - 24 * 60 * 60 * 1000;
+	const root = treeSnapshot("root-dates", 0, [treeMessage(0, now, { inputTokens: 100, outputTokens: 10 })], { createdAt: 0 });
+	const oldChild = treeSnapshot("child-old-date", 0, [treeMessage(0, now, { inputTokens: 200, outputTokens: 20 })], { createdAt: 0 });
+	const newChild = treeSnapshot("child-new-date", 1, [
+		treeMessage(0, yesterday, { inputTokens: 9_000, outputTokens: 900 }, "deepseek-flash", 8, 1),
+		treeMessage(1, now, { inputTokens: 300, outputTokens: 30 })
+	], { createdAt: now });
+	const yesterdayChild = treeSnapshot("child-yesterday", 0, [treeMessage(0, yesterday, { inputTokens: 400, outputTokens: 40 })], { createdAt: yesterday });
+	const query = makeTreeSessionQuery([root, oldChild, newChild, yesterdayChild]);
+	const rows = [
+		{ kind: "child", id: "child-old-date", parentId: "root-dates", depth: 1, mode: "one-shot", activity: "inactive", hasChildren: false },
+		{ kind: "child", id: "child-new-date", parentId: "root-dates", depth: 1, mode: "one-shot", activity: "inactive", hasChildren: false },
+		{ kind: "child", id: "child-yesterday", parentId: "root-dates", depth: 1, mode: "one-shot", activity: "inactive", hasChildren: false }
+	];
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents(rows));
+	const value = await readUsageScopes(route, "root-dates");
+	const todayRoot = treeCost({ inputTokens: 100, outputTokens: 10 }, now);
+	const todayOld = treeCost({ inputTokens: 200, outputTokens: 20 }, now);
+	const todayNew = treeCost({ inputTokens: 300, outputTokens: 30 }, now);
+	const yesterdayCost = treeCost({ inputTokens: 400, outputTokens: 40 }, yesterday);
+	assert.equal(value.tree.today.CNY, todayRoot.CNY + todayOld.CNY + todayNew.CNY);
+	assert.ok(Math.abs(value.tree.cumulative.CNY - (todayRoot.CNY + todayOld.CNY + todayNew.CNY + yesterdayCost.CNY)) < 1e-12);
+});
+
+test("usage scopes response contains only aggregate accounting, not raw child data", async () => {
+	const eventTime = Date.now();
+	const root = treeSnapshot("root-privacy", 0, [treeMessage(0, eventTime, { inputTokens: 100, outputTokens: 10 })]);
+	const child = treeSnapshot("child-privacy", 0, [treeMessage(0, eventTime, { inputTokens: 200, outputTokens: 20 })]);
+	const query = makeTreeSessionQuery([root, child]);
+	const route = await makeUsageScopesRoute(query, makeTreeSubagents([
+		{ kind: "child", id: "child-privacy", parentId: "root-privacy", depth: 1, mode: "one-shot", activity: "inactive", hasChildren: false, label: "private label" }
+	]));
+	const value = await readUsageScopes(route, "root-privacy");
+	const serialized = JSON.stringify(value);
+	assert.doesNotMatch(serialized, /root-privacy|child-privacy|private label/);
+	assert.doesNotMatch(serialized, /"(events|logs|children|catalog|members|label)"/);
+});
+
+test("Host apply awaits Session Projection registration", () => {
+	assert.match(source, /async function apply\(ctx, config\)/);
+	assert.match(source, /await ctx\.sessionProjections\.register\(billingLedger\)/);
+});
+
+test("Host apply accepts a synchronous projection disposer and publishes dependent behavior after registration", async () => {
+	let sequence = 0;
+	let registrationOrder = -1;
+	let dependentOrder = -1;
+	const ctx = makeLifecycleContext(() => {
+		registrationOrder = sequence++;
+		return () => {};
+	}, () => {
+		dependentOrder = sequence++;
+	});
+	await applyHost(ctx, {
+		enableCost: true,
+		cnyEnabled: true,
+		usdEnabled: false,
+		balance: { enabled: false }
+	});
+	assert.equal(registrationOrder, 0);
+	assert.equal(dependentOrder, 1);
+});
+
+test("Host apply waits for an awaitable projection handle and does not publish dependent behavior early", async () => {
+	let registered = 0;
+	let dependent = 0;
+	let applied = false;
+	let release;
+	const gate = new Promise((resolve) => { release = resolve; });
+	const handle = {
+		stateOf() { throw new Error("Phase 1 must not call ProjectionHandle.stateOf()"); },
+		readerFor() { throw new Error("Phase 1 must not call ProjectionHandle.readerFor()"); },
+		dispose() { throw new Error("Phase 1 must not call ProjectionHandle.dispose()"); }
+	};
+	const ctx = makeLifecycleContext(() => {
+		registered += 1;
+		// Mirror DSH 0.2.2: a callable disposer that is also awaitable and
+		// resolves to the ProjectionHandle.
+		return Object.assign(() => {}, {
+			then(resolve, reject) {
+				gate.then(() => resolve(handle), reject);
+			}
+		});
+	}, () => {
+		dependent += 1;
+	});
+	const applying = applyHost(ctx, {
+		enableCost: true,
+		cnyEnabled: true,
+		usdEnabled: false,
+		balance: { enabled: false }
+	}).then(() => { applied = true; });
+	await Promise.resolve();
+	assert.equal(registered, 1);
+	assert.equal(dependent, 0);
+	assert.equal(applied, false);
+	release();
+	await applying;
+	assert.equal(dependent, 1);
+	assert.equal(applied, true);
+});
+
+test("Host apply propagates projection registration rejection and does not publish dependent behavior", async () => {
+	let dependent = 0;
+	const ctx = makeLifecycleContext(
+		() => Promise.reject(new Error("projection registration failed")),
+		() => { dependent += 1; }
+	);
+	await assert.rejects(
+		applyHost(ctx, {
+			enableCost: true,
+			cnyEnabled: true,
+			usdEnabled: false,
+			balance: { enabled: false }
+		}),
+		/projection registration failed/
+	);
+	assert.equal(dependent, 0);
+});
+
 test("official Beijing peak hours are the default", () => {
 	assert.match(source, /default\(\[9, 10, 11, 14, 15, 16, 17\]\)/);
 });
@@ -368,8 +1572,8 @@ test("balance remains outside the Session event log", () => {
 	assert.doesNotMatch(source, /stats-decimal\/balance["'`],/);
 });
 
-test("balance change listeners are disposed with the owning plugin context", () => {
-	const route = makeBalanceRoute();
+test("balance change listeners are disposed with the owning plugin context", async () => {
+	const route = await makeBalanceRoute();
 	assert.equal(route.hostControl.listenerCounts().projections, 1);
 	assert.ok(route.hostControl.listenerCounts().host >= 5);
 	route.hostControl.dispose();
@@ -397,7 +1601,7 @@ test("default official provider resolves the API key and uses the fixed Host des
 	let authorization;
 	const destinations = [];
 	const originalFetch = globalThis.fetch;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		defaultProvider: "deepseek-official",
 		credentials: {
 			async resolve(name) {
@@ -456,7 +1660,7 @@ test("official balance binds a custom credential reference to the canonical conf
 	const credentialCalls = [];
 	let settingsWasRedacted = false;
 	const originalFetch = globalThis.fetch;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		officialConfig: { baseURL: "https://api.deepseek.com/anthropic", apiKeyEnv: "TEAM_DEEPSEEK_KEY" },
 		launchEnvironment: { get() { throw new Error("explicit baseURL must take precedence"); } },
 		onSettingsDescribe(options) { settingsWasRedacted = options?.redactSecrets === true; },
@@ -483,7 +1687,7 @@ test("official balance binds a custom credential reference to the canonical conf
 test("canonical DEEPSEEK_BASE_URL override is accepted and its exact credential reference is used", async () => {
 	const credentialCalls = [];
 	const originalFetch = globalThis.fetch;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		officialConfig: { apiKeyEnv: "CUSTOM_OFFICIAL_KEY" },
 		launchEnvironment: { get(name) {
 			assert.equal(name, "DEEPSEEK_BASE_URL");
@@ -506,7 +1710,7 @@ test("a proxy configuration fails closed and can recover after returning to the 
 	let revision = 0;
 	let credentialCalls = 0;
 	let apiCalls = 0;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		officialConfig: () => config,
 		settingsRevision: () => revision,
 		credentials: { async resolve(ref) { credentialCalls += 1; assert.equal(ref, "OFFICIAL_ROUTE_KEY"); return { value: "official-route-key" }; } }
@@ -549,7 +1753,7 @@ test("custom, HTTP, lookalike, and non-canonical routes fail before credential r
 		for (const baseURL of rejectedEndpoints) {
 			let credentialCalls = 0;
 			let apiCalls = 0;
-			const route = makeBalanceRoute({
+			const route = await makeBalanceRoute({
 				officialConfig: { baseURL, apiKeyEnv: "DEEPSEEK_API_KEY" },
 				credentials: { async resolve() { credentialCalls += 1; return { value: "must-not-resolve" }; } }
 			});
@@ -569,7 +1773,7 @@ test("custom, HTTP, lookalike, and non-canonical routes fail before credential r
 test("an environment proxy and a proxy credential named DEEPSEEK_API_KEY fail closed", async () => {
 	let credentialCalls = 0;
 	let apiCalls = 0;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		officialConfig: { apiKeyEnv: "DEEPSEEK_API_KEY" },
 		launchEnvironment: { get() { return { value: "https://proxy.invalid/anthropic" }; } },
 		credentials: { async resolve() { credentialCalls += 1; return { value: "proxy-key" }; } }
@@ -592,7 +1796,7 @@ test("explicit canonical baseURL takes precedence over an environment proxy", as
 	let environmentReads = 0;
 	let credentialCalls = 0;
 	const originalFetch = globalThis.fetch;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		officialConfig: { baseURL: "https://api.deepseek.com/anthropic", apiKeyEnv: "EXPLICIT_ROUTE_KEY" },
 		launchEnvironment: { get() { environmentReads += 1; return { value: "https://proxy.invalid/anthropic" }; } },
 		credentials: { async resolve(ref) { credentialCalls += 1; assert.equal(ref, "EXPLICIT_ROUTE_KEY"); return { value: "test-key" }; } }
@@ -618,7 +1822,7 @@ test("missing or unreadable official configuration fails before credentials and 
 	]) {
 		let credentialCalls = 0;
 		let apiCalls = 0;
-		const route = makeBalanceRoute({
+		const route = await makeBalanceRoute({
 			...options,
 			credentials: { async resolve() { credentialCalls += 1; return { value: "must-not-resolve" }; } }
 		});
@@ -644,7 +1848,7 @@ test("only the active official provider declaration and a valid credential refer
 	]) {
 		let credentialCalls = 0;
 		let apiCalls = 0;
-		const route = makeBalanceRoute({
+		const route = await makeBalanceRoute({
 			...options,
 			credentials: { async resolve() { credentialCalls += 1; return { value: "must-not-resolve" }; } }
 		});
@@ -665,7 +1869,7 @@ test("third-party provider routes never inspect DeepSeek credentials or call bal
 	let credentialCalls = 0;
 	let accountCalls = 0;
 	let apiCalls = 0;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: { next: { provider: "openai", model: "third-party-model" }, lastUsed: null },
 		credentials: { async resolve() { credentialCalls += 1; return { value: "must-not-resolve" }; } },
 		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
@@ -689,7 +1893,7 @@ test("a changed adapter credential reference during credential resolution preven
 	const credentialStartedPromise = new Promise((resolve) => { credentialStarted = resolve; });
 	let credentialCalls = 0;
 	let apiCalls = 0;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		officialConfig: () => currentConfig,
 		settingsRevision: () => revision,
 		credentials: { async resolve(ref) {
@@ -726,7 +1930,7 @@ test("a route change queued after credential resolution is caught at the final p
 	let settingsReads = 0;
 	let apiCalls = 0;
 	let routeChanged = false;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		officialConfig: () => currentConfig,
 		settingsRevision: () => revision,
 		onSettingsDescribe() {
@@ -772,7 +1976,7 @@ test("a late balance response is discarded after adapter endpoint configuration 
 	let releaseFetch;
 	let fetchStarted;
 	const fetchStartedPromise = new Promise((resolve) => { fetchStarted = resolve; });
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		officialConfig: () => currentConfig,
 		settingsRevision: () => revision,
 		credentials: { async resolve() { return { value: "late-response-key" }; } }
@@ -812,7 +2016,7 @@ test("Session provider changes while credentials resolve stop dispatch without p
 		let accountCalls = 0;
 		let apiCalls = 0;
 		const sessionId = VALID_BALANCE_RPC.payload.sessionId;
-		const route = makeBalanceRoute({
+		const route = await makeBalanceRoute({
 			modelSelection: () => selection,
 			credentials: { async resolve() { credentialCalls += 1; credentialStarted.resolve(); return credential.promise; } },
 			account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
@@ -844,7 +2048,7 @@ test("Session invalidated while acquiring the credential service never calls cre
 	let accountCalls = 0;
 	let route;
 	const sessionId = VALID_BALANCE_RPC.payload.sessionId;
-	route = makeBalanceRoute({
+	route = await makeBalanceRoute({
 		modelSelection: () => selection,
 		onConnectionServiceGet(name) {
 			if (name !== "credentials") return;
@@ -874,7 +2078,7 @@ test("official to account to official during credential resolution invalidates t
 	let apiCalls = 0;
 	let accountCalls = 0;
 	const sessionId = VALID_BALANCE_RPC.payload.sessionId;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: () => selection,
 		credentials: { async resolve() { credentialStarted.resolve(); return credential.promise; } },
 		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
@@ -905,7 +2109,7 @@ test("Session disappearance while credentials resolve prevents official dispatch
 	let apiCalls = 0;
 	let accountCalls = 0;
 	const sessionId = VALID_BALANCE_RPC.payload.sessionId;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 		credentials: { async resolve() { credentialStarted.resolve(); return credential.promise; } },
 		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
@@ -934,7 +2138,7 @@ test("Session provider change at the final synchronous route check prevents Fetc
 	let apiCalls = 0;
 	let accountCalls = 0;
 	const sessionId = VALID_BALANCE_RPC.payload.sessionId;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: () => selection,
 		onSettingsDescribe() {
 			settingsReads += 1;
@@ -967,7 +2171,7 @@ test("late successful Fetch after official-account-official invalidation is disc
 	let apiCalls = 0;
 	let accountCalls = 0;
 	const sessionId = VALID_BALANCE_RPC.payload.sessionId;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: () => selection,
 		credentials: { async resolve() { return { value: "late-session-response-key" }; } },
 		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
@@ -995,7 +2199,7 @@ test("late successful Fetch after official-account-official invalidation is disc
 
 test("credential rotation observed before resolution uses the current Host generation", async () => {
 	let credentialCalls = 0;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 		credentials: { async resolve(ref) { credentialCalls += 1; assert.equal(ref, "DEEPSEEK_API_KEY"); return { value: "rotated-before-resolution-key" }; } }
 	});
@@ -1021,7 +2225,7 @@ test("credential rotation during credential resolution suppresses the pending di
 	const credential = deferred();
 	let apiCalls = 0;
 	let accountCalls = 0;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 		credentials: { async resolve() { credentialStarted.resolve(); return credential.promise; } },
 		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
@@ -1052,7 +2256,7 @@ test("credential invalidation does not depend on a route read during a transient
 	let apiCalls = 0;
 	let accountCalls = 0;
 	const logs = [];
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 		onSettingsDescribe() {
 			if (updateInspectionFailure) {
@@ -1090,7 +2294,7 @@ test("credential update during credentials service acquisition invalidates befor
 	let credentialCalls = 0;
 	let apiCalls = 0;
 	let accountCalls = 0;
-	route = makeBalanceRoute({
+	route = await makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 		onConnectionServiceGet(name) {
 			if (name === "credentials" && !updateSent) {
@@ -1124,7 +2328,7 @@ test("unrelated credential updates cannot leak into or fall back from the select
 	let accountCalls = 0;
 	const reference = "UNRELATED_PRIVATE_REFERENCE";
 	const logs = [];
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 		credentials: { async resolve() { credentialCalls += 1; credentialStarted.resolve(); return credential.promise; } },
 		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } },
@@ -1153,7 +2357,7 @@ test("credential rotation immediately before Fetch fails the final generation ch
 	let rotationSent = false;
 	let settingsReads = 0;
 	let apiCalls = 0;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 		onSettingsDescribe() {
 			settingsReads += 1;
@@ -1181,7 +2385,7 @@ test("credential rotation after dispatch rejects the late successful balance", a
 	const fetchStarted = deferred();
 	const fetchResponse = deferred();
 	let apiCalls = 0;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 		credentials: { async resolve() { return { value: "already-dispatched-key" }; } }
 	});
@@ -1209,7 +2413,7 @@ test("official balance accepts exactly the byte cap and rejects larger actual bo
 	const oversizedBytes = new TextEncoder().encode(exactBody + " ");
 	const originalFetch = globalThis.fetch;
 	try {
-		const acceptedRoute = makeBalanceRoute({
+		const acceptedRoute = await makeBalanceRoute({
 			modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 			credentials: { async resolve() { return { value: "size-cap-key" }; } }
 		});
@@ -1218,7 +2422,7 @@ test("official balance accepts exactly the byte cap and rejects larger actual bo
 		assert.equal(accepted.error, null);
 		assert.deepEqual(accepted.balances, { CNY: null, USD: null });
 
-		const rejectedRoute = makeBalanceRoute({
+		const rejectedRoute = await makeBalanceRoute({
 			modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 			credentials: { async resolve() { return { value: "size-cap-key" }; } }
 		});
@@ -1240,7 +2444,7 @@ test("official balance accepts exactly the byte cap and rejects larger actual bo
 test("official balance rejects malformed JSON and cancels a stalled body read", async () => {
 	const originalFetch = globalThis.fetch;
 	try {
-		const malformedRoute = makeBalanceRoute({
+		const malformedRoute = await makeBalanceRoute({
 			modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 			credentials: { async resolve() { return { value: "malformed-response-key" }; } }
 		});
@@ -1252,7 +2456,7 @@ test("official balance rejects malformed JSON and cancels a stalled body read", 
 		const controller = new AbortController();
 		const fetchStarted = deferred();
 		let bodyCancelled = false;
-		const cancelledRoute = makeBalanceRoute({
+		const cancelledRoute = await makeBalanceRoute({
 			modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 			credentials: { async resolve() { return { value: "cancelled-body-key" }; } }
 		});
@@ -1292,7 +2496,7 @@ test("selected account provider uses only DSH account balance even when API cred
 	let accountCalls = 0;
 	let apiCalls = 0;
 	const originalFetch = globalThis.fetch;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-account", model: "account-model" }, lastUsed: { provider: "deepseek-official", model: "old-model" } },
 		credentials: { async resolve() { credentialCalls += 1; return { value: fakeCredential }; } },
 		account: {
@@ -1341,7 +2545,7 @@ test("selected official provider with unavailable credentials fails without acco
 	let accountCalls = 0;
 	let apiCalls = 0;
 	const originalFetch = globalThis.fetch;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 		credentials: { async resolve() { throw new Error(credentialDetail); } },
 		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } },
@@ -1365,7 +2569,7 @@ test("selected official provider with unavailable credentials fails without acco
 		assert.doesNotMatch(JSON.stringify(body), /private credential resolver detail/);
 		assert.ok(logs.every((message) => !message.includes(credentialDetail)));
 
-		const missingKeyRoute = makeBalanceRoute({
+		const missingKeyRoute = await makeBalanceRoute({
 			modelSelection: { next: null, lastUsed: { provider: "deepseek-official", model: "official-model" } },
 			credentials: { async resolve() { return { value: "" }; } },
 			account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
@@ -1383,7 +2587,7 @@ test("selected official provider with unavailable credentials fails without acco
 test("selected account provider fails if its balance capability is unavailable", async () => {
 	const serviceLookups = [];
 	let credentialCalls = 0;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-account", model: "account-model" }, lastUsed: null },
 		credentials: { async resolve() { credentialCalls += 1; return { value: "unused" }; } },
 		serviceLookups
@@ -1398,7 +2602,7 @@ test("selected account provider fails if its balance capability is unavailable",
 test("selected account provider reports account authentication failures without checking API credentials", async () => {
 	const serviceLookups = [];
 	let credentialCalls = 0;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-account", model: "account-model" }, lastUsed: null },
 		credentials: { async resolve() { credentialCalls += 1; return { value: "must-not-fallback" }; } },
 		account: { async getBalance() { return { status: "unauthenticated", detail: "private auth response" }; } },
@@ -1414,7 +2618,7 @@ test("selected account provider reports account authentication failures without 
 
 test("pending Session selection takes precedence over last-used and ignores both credential availability and payload provider", async () => {
 	const calls = { account: 0, credentials: 0 };
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		projectionContract: "v0.2.1-rc.1",
 		modelSelection: { next: { provider: "deepseek-account", model: "pending-model" }, lastUsed: { provider: "deepseek-official", model: "used-model" } },
 		credentials: { async resolve() { calls.credentials += 1; return { value: "available-key" }; } },
@@ -1432,7 +2636,7 @@ test("pending Session selection takes precedence over last-used and ignores both
 test("last-used Session provider is used when no selection is pending", async () => {
 	let credentialCalls = 0;
 	let accountCalls = 0;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		projectionContract: "v0.2.0-rc.2",
 		modelSelection: { next: null, lastUsed: { provider: "deepseek-official", model: "last-model" } },
 		credentials: { async resolve() { credentialCalls += 1; return { value: "test-key" }; } },
@@ -1454,7 +2658,7 @@ test("different Sessions with different providers each use their own authoritati
 	const calls = { account: 0, credentials: 0 };
 	const accountId = "account-session";
 	const officialId = "official-session";
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: (_read, sessionId) => sessionId === accountId
 			? { next: { provider: "deepseek-account", model: "account-model" }, lastUsed: null }
 			: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
@@ -1477,7 +2681,7 @@ test("different Sessions with different providers each use their own authoritati
 test("concurrent Session components share one provider-wide balance request", async () => {
 	let accountCalls = 0;
 	let resolveAccount;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-account", model: "account-model" }, lastUsed: null },
 		account: { async getBalance() {
 			accountCalls += 1;
@@ -1500,7 +2704,7 @@ test("new Session follows the current global default, including default changes 
 	let currentDefault = { provider: "deepseek-account", model: "account-model" };
 	let accountCalls = 0;
 	let credentialCalls = 0;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		projectionContract: "v0.2.1-rc.1",
 		asOfSeq: -1,
 		defaultSelection: () => currentDefault,
@@ -1531,7 +2735,7 @@ test("a default-model change during credential resolution prevents dispatch for 
 	let currentDefault = { provider: "deepseek-official", model: "official-model" };
 	let apiCalls = 0;
 	let accountCalls = 0;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		defaultSelection: () => currentDefault,
 		credentials: { async resolve() { credentialStarted.resolve(); return credential.promise; } },
 		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
@@ -1562,7 +2766,7 @@ test("selected account uses only getBalance and fails closed when no account ses
 	let credentialCalls = 0;
 	let balanceCalls = 0;
 	let stateCalls = 0;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-account", model: "account-model" }, lastUsed: null },
 		credentials: { async resolve() { credentialCalls += 1; return { value: "unused-key" }; } },
 		account: {
@@ -1580,7 +2784,7 @@ test("selected account uses only getBalance and fails closed when no account ses
 
 test("selected official provider fails closed when its key is missing even if account login exists", async () => {
 	let balanceCalls = 0;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 		credentials: { async resolve() { return undefined; } },
 		account: { async getBalance() { balanceCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
@@ -1600,7 +2804,7 @@ test("unsupported, malformed, and unresolved Session selections fail closed with
 	]) {
 		let credentialCalls = 0;
 		let accountCalls = 0;
-		const route = makeBalanceRoute({
+		const route = await makeBalanceRoute({
 			...options,
 			credentials: { async resolve() { credentialCalls += 1; return { value: "unused" }; } },
 			account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } }
@@ -1636,7 +2840,7 @@ test("migration-required Session projection hints never influence provider resol
 			const calls = { defaults: 0, credentials: 0, account: 0 };
 			const logs = [];
 			const serviceLookups = [];
-			const route = makeBalanceRoute({
+			const route = await makeBalanceRoute({
 				projectionResponse: { kind: "migration-required", values: scenario.values },
 				defaultReads() { calls.defaults += 1; },
 				credentials: { async resolve() { calls.credentials += 1; return { value: "must-not-resolve" }; } },
@@ -1682,7 +2886,7 @@ test("unknown and malformed Session projection baselines fail closed before prov
 		globalThis.fetch = async () => { fetchCalls += 1; throw new Error("invalid projections must not dispatch a balance request"); };
 		for (const scenario of cases) {
 			const calls = { defaults: 0, credentials: 0, account: 0 };
-			const route = makeBalanceRoute({
+			const route = await makeBalanceRoute({
 				projectionResponse: scenario.response,
 				defaultReads() { calls.defaults += 1; },
 				credentials: { async resolve() { calls.credentials += 1; return { value: "must-not-resolve" }; } },
@@ -1704,7 +2908,7 @@ test("a provider switch during the balance call rejects the late old-provider re
 	let accountCalls = 0;
 	let credentialCalls = 0;
 	let releaseAccount;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: (count) => count === 1
 			? { next: { provider: "deepseek-account", model: "account-model" }, lastUsed: null }
 			: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
@@ -1737,16 +2941,16 @@ test("disabled balance view exposes only a boolean and the endpoint never reache
 			callback({ connection: { fetch: { register: (value) => { if (value.path.endsWith("/getBalance")) route = value; return () => {}; } } }, get() { throw new Error("no provider lookup allowed"); }, effect(effect) { effect(); } });
 		}
 	};
-	applyHost(ctx, { enableCost: true, cnyEnabled: true, balance: { enabled: false } });
+	await applyHost(ctx, { enableCost: true, cnyEnabled: true, balance: { enabled: false } });
 	const view = projections[0].wire.view(projections[0].init());
 	assert.equal(view.balanceEnabled, false);
-	assert.equal(projections[0].stateVersion, 7);
+	assert.equal(projections[0].stateVersion, 8);
 	const response = await makeRpcRequest(route, VALID_BALANCE_RPC);
 	assert.equal((await response.json()).result.value.enabled, false);
 });
 
 test("account-selected failures never resolve credentials and official-selected failures never call account", async () => {
-	const accountRoute = makeBalanceRoute({
+	const accountRoute = await makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-account", model: "account-model" }, lastUsed: null },
 		account: { async getBalance() { throw new Error("account balance failed"); } },
 		credentials: { async resolve() { throw new Error("must not resolve while account mode is selected"); } }
@@ -1755,7 +2959,7 @@ test("account-selected failures never resolve credentials and official-selected 
 	assert.equal((await accountResponse.json()).result.value.error, "account-balance-failed");
 
 	let accountCalls = 0;
-	const officialRoute = makeBalanceRoute({
+	const officialRoute = await makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 		account: { async getBalance() { accountCalls += 1; return { status: "ready", value: [], bonusWallets: [] }; } },
 		credentials: { async resolve() { return undefined; } }
@@ -1769,7 +2973,7 @@ test("official Fetch has a bounded deadline even when a mocked fetch ignores Abo
 	const originalFetch = globalThis.fetch;
 	const originalSetTimeout = globalThis.setTimeout;
 	let fetchSignal;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-official", model: "official-model" }, lastUsed: null },
 		credentials: { async resolve() { return { value: "fake-timeout-key" }; } }
 	});
@@ -1794,7 +2998,7 @@ test("account timeout stays within the pinned service maximum and never falls ba
 	const originalSetTimeout = globalThis.setTimeout;
 	let credentialCalls = 0;
 	let accountCalls = 0;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-account", model: "account-model" }, lastUsed: null },
 		account: { async getBalance() { accountCalls += 1; return await new Promise(() => {}); } },
 		credentials: { async resolve() { credentialCalls += 1; return { value: "unused" }; } }
@@ -1837,7 +3041,7 @@ test("session daily RPC reads its timezone and session ID from the Connection pa
 			};
 		}
 	};
-	const route = makeSessionDailyRoute(sessionQuery);
+	const route = await makeSessionDailyRoute(sessionQuery);
 	const response = await makeRpcRequest(route, {
 		type: "client-request",
 		rpcId: "rpc-session-daily-1",
@@ -1856,7 +3060,7 @@ test("session daily RPC reads its timezone and session ID from the Connection pa
 
 test("malformed balance RPC envelopes keep the existing 400 responses", async () => {
 	let credentialCalls = 0;
-	const route = makeBalanceRoute({ credentials: { resolve: async () => { credentialCalls += 1; return undefined; } } });
+	const route = await makeBalanceRoute({ credentials: { resolve: async () => { credentialCalls += 1; return undefined; } } });
 	const malformed = await makeRpcRequest(route, "{not-json");
 	assert.equal(malformed.status, 400);
 	assert.equal(await malformed.text(), "body is not JSON");
@@ -1870,7 +3074,7 @@ test("official balance redirect is rejected before any unexpected destination is
 	const fakeCredential = "redirect-test-api-key";
 	const redirectTarget = "https://attacker.invalid/collect";
 	const destinations = [];
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		credentials: { async resolve() { return { value: fakeCredential }; } }
 	});
 	const originalFetch = globalThis.fetch;
@@ -1902,7 +3106,7 @@ test("balance provider failures return stable sanitized codes without provider d
 	const providerDetail = "test provider internal detail";
 	const originalFetch = globalThis.fetch;
 	const logs = [];
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		credentials: { resolve: async () => ({ value: fakeCredential }) },
 		account: { async getBalance() { throw new Error("must not fall back after HTTP error"); } },
 		logs
@@ -1945,7 +3149,7 @@ test("account-provider failures expose only the existing sanitized error code", 
 	const providerSecret = "test-provider-private-auth-detail";
 	const logs = [];
 	let credentialCalls = 0;
-	const route = makeBalanceRoute({
+	const route = await makeBalanceRoute({
 		modelSelection: { next: { provider: "deepseek-account", model: "account-model" }, lastUsed: null },
 		credentials: { async resolve() { credentialCalls += 1; return { value: "must-not-fallback" }; } },
 		account: {
@@ -1972,7 +3176,7 @@ test("account-provider failures expose only the existing sanitized error code", 
 
 test("invalid balance values are rejected without changing valid currency values", async () => {
 	const originalFetch = globalThis.fetch;
-	const route = makeBalanceRoute({ credentials: { resolve: async () => ({ value: "test-only-key" }) } });
+	const route = await makeBalanceRoute({ credentials: { resolve: async () => ({ value: "test-only-key" }) } });
 	try {
 		globalThis.fetch = async () => new Response(JSON.stringify({
 			balance_infos: [
